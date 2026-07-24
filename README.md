@@ -1,8 +1,9 @@
-# Kalkulator Lotto EV/RTP
+# Kalkulator Lotto
 
-Zaawansowany kalkulator wartości oczekiwanej (EV) i zwrotu dla gracza (RTP)
-gier liczbowych Totalizatora Sportowego. Analiza oparta o oficjalne regulaminy,
-tabele wygranych, kumulacje oraz promocje okresowe.
+Narzędzie do analizy gier liczbowych Totalizatora Sportowego: generatory
+kuponów i systemów, statystyki losowań, symulacje budżetu oraz wyliczanie
+wartości oczekiwanej (EV) i zwrotu dla gracza (RTP). Analiza oparta o oficjalne
+regulaminy, tabele wygranych, kumulacje oraz promocje okresowe.
 
 **Wersja online:** https://isithunzi000.github.io/lotto/
 
