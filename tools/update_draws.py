@@ -44,6 +44,7 @@ INDEX_PATH = os.path.join(REPO_ROOT, 'index.html')
 DATA_DIR = os.path.join(REPO_ROOT, 'data')
 JACKPOTS_PATH = os.path.join(DATA_DIR, 'kumulacje.csv')
 BLOB_RE = re.compile(r'^const HIST_DATA_B64 = "H4sI[^"]*"', re.M)
+KUMULACJE_RE = re.compile(r'^const KUMULACJE_JSON = \{[^\n]+\};$', re.M)
 
 MAX_BACKFILL_DAYS = 370   # bezpiecznik na wypadek uszkodzonej bazy
 REQUEST_PAUSE_S = 0.3
@@ -276,6 +277,27 @@ def rebuild_blob():
     return True
 
 
+def embed_jackpots(jk_csv_text):
+    """Wbudowuje kumulacje z data/kumulacje.csv do index.html
+    (const KUMULACJE_JSON, czytany przez zakładkę EV kalkulatora).
+    Stała kolejność kluczy = JACKPOT_GAMES. Zwraca True, gdy plik się zmienił."""
+    data = {}
+    for line in jk_csv_text.strip().split('\n'):
+        game, value, date = line.split(',')
+        data[game] = {'value': int(value), 'date': date}
+    ordered = {game: data[game] for game, _ in JACKPOT_GAMES if game in data}
+    const_line = 'const KUMULACJE_JSON = ' + json.dumps(
+        ordered, ensure_ascii=False, separators=(',', ':')) + ';'
+    src = open(INDEX_PATH, encoding='utf-8').read()
+    new_src, n = KUMULACJE_RE.subn(lambda _: const_line, src, count=1)
+    if n != 1:
+        fail('nie znaleziono zakotwiczonej linii KUMULACJE_JSON w index.html')
+    if new_src == src:
+        return False
+    open(INDEX_PATH, 'w', encoding='utf-8').write(new_src)
+    return True
+
+
 # ---------- przebieg główny ----------
 
 def main():
@@ -353,6 +375,7 @@ def main():
 
     # Kumulacje (soft-fail: błąd endpointu nie blokuje wyników)
     jackpots_changed = False
+    jk_embedded = False
     jk = build_jackpots_csv(api_key)
     if jk is not None:
         old = open(JACKPOTS_PATH, encoding='utf-8').read() if os.path.exists(JACKPOTS_PATH) else None
@@ -362,11 +385,15 @@ def main():
             log('kumulacje.csv: zaktualizowano -> ' + ' | '.join(jk.strip().split('\n')))
         else:
             log('kumulacje.csv: bez zmian')
+        # v4.11.0: kumulacje wbudowane w index.html (zakładka EV czyta je z pliku)
+        jk_embedded = embed_jackpots(jk)
+        if jk_embedded:
+            log('index.html: wbudowano zaktualizowane kumulacje (KUMULACJE_JSON)')
 
     # Przebudowa bloba z CSV (zawsze z aktualnych plików)
     blob_changed = rebuild_blob() if total_added > 0 else False
 
-    if total_added == 0 and not jackpots_changed:
+    if total_added == 0 and not jackpots_changed and not jk_embedded:
         log('Brak nowych danych — repo bez zmian.')
         write_github_output('false', '')
         return
