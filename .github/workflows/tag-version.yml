@@ -1,8 +1,9 @@
 name: Tag wersji
 
-# Lekki tag git przy każdej zmianie numeru wersji w index.html.
+# Lekki tag git przy każdej zmianie numeru wersji w index.html + GitHub
+# Release dla nowego taga (notatka = komunikat commita wersji).
 # Sonda danych też dotyka index.html, ale bez zmiany wersji — wtedy tag
-# już istnieje i krok kończy się no-op.
+# już istnieje i workflow kończy się no-op (release też jest pomijany).
 
 on:
   push:
@@ -21,16 +22,28 @@ jobs:
         with:
           fetch-depth: 0
       - name: Utwórz tag z version-tag w index.html
+        id: tag
         run: |
           # Szukamy numeru w HTML-owym divie (version-tag">vX.Y.Z), nie w regułach CSS.
           V=$(grep -m1 -oE 'version-tag">v[0-9]+\.[0-9]+\.[0-9]+' index.html | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
           if [ -z "$V" ]; then echo "nie znaleziono numeru wersji"; exit 1; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
           if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
             echo "tag $V już istnieje — pomijam"
+            echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$V"
           git push origin "$V"
+          echo "created=true" >> "$GITHUB_OUTPUT"
           echo "utworzono tag $V"
+      - name: Utwórz GitHub Release z notatką z commita wersji
+        if: steps.tag.outputs.created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: ${{ steps.tag.outputs.version }}
+        run: |
+          gh release create "$V" --title "$V" --notes "$(git log -1 --format=%B HEAD)"
+          echo "utworzono release $V"
