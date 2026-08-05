@@ -569,7 +569,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.11.0 | 05-08-2026</div>
+    <div class="version-tag">v4.11.1 | 05-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -8060,7 +8060,8 @@ function updateMmPromo(key) {
     labelEl.textContent = 'RTP (bez promocji)';
     const base = isPlusCard ? multiMultiPlusEv() : multiMultiEv();
     rtpEl.textContent = base.rtpPct.toFixed(2) + '%';
-    noteEl.textContent = 'Zaznacz powyżej tylko, gdy akurat trwa promocja — wpisz bonus i typ (liczbę skreśleń), którego dotyczy. Promocje zmieniają się co kilka dni — sprawdź aktualną na wynikilotto.net.pl/multi-multi/promocje/.';
+    // v4.11.1: adres promocji jako klikalny link (wcześniej zwykły tekst w textContent)
+    noteEl.innerHTML = 'Zaznacz powyżej tylko, gdy akurat trwa promocja — wpisz bonus i typ (liczbę skreśleń), którego dotyczy. Promocje zmieniają się co kilka dni — sprawdź aktualną na <a class="link-inline" href="https://www.wynikilotto.net.pl/multi-multi/promocje/" target="_blank" rel="noopener">wynikilotto.net.pl/multi-multi/promocje</a>.';
     return;
   }
   const f = 1 + pct / 100;
