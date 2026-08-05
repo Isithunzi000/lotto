@@ -65,12 +65,23 @@ i dopisuje nowe losowania. Pliki w repo:
   z wynikilotto.net.pl (zweryfikowane, bez historycznych błędów)
 - `data/kumulacje.csv` — aktualne kumulacje Lotto i Eurojackpot
 - `data/wyplaty_lotto.csv` — faktyczne wypłaty per stopień dla Lotto
-  (źródło domyślnych estymacji 4/6 i 5/6 w zakładce EV)
+  (źródło domyślnych estymacji 4/6 i 5/6 w zakładce EV; z liczb zwycięzców
+  3/4/5-trafień sonda estymuje też sprzedaż zakładów wg głębokości kumulacji
+  — presety sprzedaży w panelu „Kumulacja a EV")
 - `data/wyplaty_minilotto.csv` — faktyczne wypłaty Mini Lotto
   (mediany warunkowe „padła/nie padła 5/5" — szacunek EV w zakładce EV)
 - `data/wyplaty_eurojackpot.csv` — faktyczne wypłaty Eurojackpot
   (średnie i mediany stopni V–XII — szacunek EV niższych stopni;
   kolumna nr to identyfikator losowania z API, nie numer z bazy wyników)
+
+Dodatkowo repo zawiera `tools/calibrate_popularity.py` — skrypt kalibracji
+empirycznej wag modelu popularności zestawów (regresja log-ilorazowa WLS
+na liczbach zwycięzców z API; train/test 80/20). Kalibracja nie jest
+uruchamiana w Actions — zmienia stałe modelu i wymaga ręcznego przeglądu.
+Wynik jest wbudowywany w `index.html` jako `POPULARNOSC_KALIBR_JSON`
+i stosowany wyłącznie dla puli 49 (Lotto / Lotto Plus); pozostałe gry
+używają dotychczasowej heurystyki. Uruchomienie:
+`python3 tools/calibrate_popularity.py` (lub `--dry-run` bez zapisu).
 
 ## Dane i prywatność
 
