@@ -569,7 +569,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.11.1 | 05-08-2026</div>
+    <div class="version-tag">v4.12.0 | 05-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -2152,10 +2152,10 @@
       <div class="age-note">Nie musisz tego szukać — preset „typowe" wystarczy; sprzedaż zmienia wynik tylko nieznacznie. Dla dociekliwych: Totalizator podaje sprzedaż (w zł) przy każdym wyniku na <a class="link-inline" href="https://www.lotto.pl/lotto/wyniki-i-wygrane" target="_blank" rel="noopener">lotto.pl → wyniki i wygrane</a> — podziel ją przez 3 zł i masz liczbę zakładów.</div>
       
       <div class="jackpot-grid">
-        <div><label class="field-label">Szac. wygrana „czwórka" (zł)</label><input type="number" id="jkT4" value="170" min="36" step="1"></div>
-        <div><label class="field-label">Szac. wygrana „piątka" (zł)</label><input type="number" id="jkT5" value="7000" min="0" step="100"></div>
+        <div><label class="field-label">Szac. wygrana „czwórka" (zł)</label><input type="number" id="jkT4" value="163.75" min="36" step="1"></div>
+        <div><label class="field-label">Szac. wygrana „piątka" (zł)</label><input type="number" id="jkT5" value="5874.5" min="0" step="100"></div>
       </div>
-      <div class="age-note">Wartości domyślne to orientacyjne, typowe kwoty — dokładne wypłaty per stopień zobaczysz po kliknięciu losowania na <a class="link-inline" href="https://www.wynikilotto.net.pl/lotto/wyniki/" target="_blank" rel="noopener">wynikilotto.net.pl → Lotto → wygrane i wyniki</a>.</div>
+      <div class="age-note">Wartości domyślne = mediana faktycznych wypłat z 30 ostatnich losowań (oficjalne API LOTTO, stan na 04.08.2026). Dokładne wypłaty per stopień zobaczysz po kliknięciu losowania na <a class="link-inline" href="https://www.wynikilotto.net.pl/lotto/wyniki/" target="_blank" rel="noopener">wynikilotto.net.pl → Lotto → wygrane i wyniki</a>.</div>
       <label class="check-row" style="margin-top:12px;">
         <input type="checkbox" id="jkTax" checked="">
         Uwzględnij podatek 10% od wygranych powyżej 2280 zł
@@ -7786,6 +7786,19 @@ function jackpotPoolDate(key) {
   return (auto && auto.value > 0 && auto.date) ? auto.date : null;
 }
 
+// v4.12.0: domyślne wypłaty 4/6 i 5/6 = mediana faktycznych wypłat z ostatnich
+// 30 losowań (WYPLATY_JSON, API LOTTO). Fallback = dawne orientacyjne kwoty.
+function wyplataDefault(hits) {
+  const w = (typeof WYPLATY_JSON !== 'undefined') ? WYPLATY_JSON : null;
+  const v = w ? (hits === 4 ? w.t4 : w.t5) : null;
+  if (typeof v === 'number' && v > 0) return v;
+  return hits === 4 ? 170 : 7000;
+}
+function wyplataStanNa() {
+  const w = (typeof WYPLATY_JSON !== 'undefined') ? WYPLATY_JSON : null;
+  return (w && w.stanNa) ? w.stanNa : null;
+}
+
 function jackpotPanelHtml(key) {
   const s = loadJackpotState(key);
   const isLotto = key === 'lotto';
@@ -7819,10 +7832,10 @@ function jackpotPanelHtml(key) {
       <div class="age-note">Nie musisz tego szukać — preset „typowe" wystarczy; sprzedaż zmienia wynik tylko nieznacznie. Dla dociekliwych: Totalizator podaje sprzedaż (w zł) przy każdym wyniku na <a class="link-inline" href="https://www.lotto.pl/lotto/wyniki-i-wygrane" target="_blank" rel="noopener">lotto.pl → wyniki i wygrane</a> — podziel ją przez ${isLotto ? '3 zł' : '12,50 zł'} i masz liczbę zakładów.${isLotto ? '' : ' Dla Eurojackpot liczy się sprzedaż ogólnoeuropejska (niepublikowana oficjalnie) — preset to rząd wielkości.'}</div>
       ${isLotto ? `
       <div class="jackpot-grid">
-        <div><label class="field-label">Szac. wygrana „czwórka" (zł)</label><input type="number" id="jkT4" value="${s.t4 !== undefined ? s.t4 : 170}" min="36" step="1"></div>
-        <div><label class="field-label">Szac. wygrana „piątka" (zł)</label><input type="number" id="jkT5" value="${s.t5 !== undefined ? s.t5 : 7000}" min="0" step="100"></div>
+        <div><label class="field-label">Szac. wygrana „czwórka" (zł)</label><input type="number" id="jkT4" value="${s.t4 !== undefined ? s.t4 : wyplataDefault(4)}" min="36" step="1"></div>
+        <div><label class="field-label">Szac. wygrana „piątka" (zł)</label><input type="number" id="jkT5" value="${s.t5 !== undefined ? s.t5 : wyplataDefault(5)}" min="0" step="100"></div>
       </div>
-      <div class="age-note">Wartości domyślne to orientacyjne, typowe kwoty — dokładne wypłaty per stopień zobaczysz po kliknięciu losowania na <a class="link-inline" href="https://www.wynikilotto.net.pl/lotto/wyniki/" target="_blank" rel="noopener">wynikilotto.net.pl → Lotto → wygrane i wyniki</a>.</div>` : ''}
+      <div class="age-note">${wyplataStanNa() ? `Wartości domyślne = mediana faktycznych wypłat z 30 ostatnich losowań (oficjalne API LOTTO, stan na ${wyplataStanNa()}).` : 'Wartości domyślne to orientacyjne, typowe kwoty.'} Dokładne wypłaty per stopień zobaczysz po kliknięciu losowania na <a class="link-inline" href="https://www.wynikilotto.net.pl/lotto/wyniki/" target="_blank" rel="noopener">wynikilotto.net.pl → Lotto → wygrane i wyniki</a>.</div>` : ''}
       <label class="check-row" style="margin-top:12px;">
         <input type="checkbox" id="jkTax" ${s.tax === false ? '' : 'checked'}>
         Uwzględnij podatek 10% od wygranych powyżej 2280 zł
@@ -8160,6 +8173,9 @@ const HIST_DATA_B64 = "H4sIAAAAAAACA3y9y64nvY8c+C7/9YeGSN3nVRqG0YtezBgzMGzv5uUnT
 // v4.11.0: aktualne kumulacje z oficjalnego API LOTTO — linia nadpisywana automatycznie
 // przez tools/update_draws.py przy kazdej aktualizacji danych (sonda GitHub Actions).
 const KUMULACJE_JSON = {"lotto":{"value":3000000,"date":"06.08.2026"},"eurojackpot":{"value":140000000,"date":"07.08.2026"}};
+// v4.12.0: mediany faktycznych wypłat 4/6 i 5/6 Lotto z 30 ostatnich losowań
+// (oficjalne API LOTTO) — linia nadpisywana automatycznie przez tools/update_draws.py.
+const WYPLATY_JSON = {"t4":163.75,"t5":5874.5,"n":30,"stanNa":"04.08.2026"};
 
 async function loadHistData() {
   const binStr = atob(HIST_DATA_B64);

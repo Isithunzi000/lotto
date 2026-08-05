@@ -1,0 +1,34 @@
+name: Tag wersji
+
+# Lekki tag git przy każdej zmianie numeru wersji w index.html.
+# Sonda danych też dotyka index.html, ale bez zmiany wersji — wtedy tag
+# już istnieje i krok kończy się no-op.
+
+on:
+  push:
+    branches: [main]
+    paths: [index.html]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Utwórz tag z version-tag w index.html
+        run: |
+          V=$(grep -m1 'version-tag' index.html | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          if [ -z "$V" ]; then echo "nie znaleziono numeru wersji"; exit 1; fi
+          if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+            echo "tag $V już istnieje — pomijam"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$V"
+          git push origin "$V"
+          echo "utworzono tag $V"
