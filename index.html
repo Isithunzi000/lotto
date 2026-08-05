@@ -569,7 +569,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.14.0 | 05-08-2026</div>
+    <div class="version-tag">v4.15.0 | 05-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -2757,10 +2757,12 @@ const BIRTHDAY_MAX = 31, BIRTHDAY_WEIGHT = 3.0;
 const ROUND_NUMBERS_BONUS = 1.3;
 const ROUND_NUMBERS = new Set([7,13,14,17,21,22,27,28]);
 
-// v4.14.0: dla puli 49 (Lotto) wagi pochodzą z kalibracji empirycznej na liczbach
-// zwycięzców z API (POPULARNOSC_KALIBR_JSON); dla pozostałych gier — heurystyka.
+// v4.14.0/v4.15.0: dla puli 49 (Lotto) i 42 (Mini Lotto) wagi pochodzą z kalibracji
+// empirycznej na liczbach zwycięzców z API (POPULARNOSC_KALIBR_JSON /
+// POPULARNOSC_KALIBR_MINI_JSON); dla pozostałych gier — heurystyka.
 function popularityWeight(n, poolSize) {
-  const k = (poolSize === 49 && typeof POPULARNOSC_KALIBR_JSON !== 'undefined') ? POPULARNOSC_KALIBR_JSON : null;
+  const k = (poolSize === 49 && typeof POPULARNOSC_KALIBR_JSON !== 'undefined') ? POPULARNOSC_KALIBR_JSON
+    : (poolSize === 42 && typeof POPULARNOSC_KALIBR_MINI_JSON !== 'undefined') ? POPULARNOSC_KALIBR_MINI_JSON : null;
   const bw = (k && k.w > 1) ? k.w : BIRTHDAY_WEIGHT;
   const rw = (k && k.wr > 0) ? k.wr : ROUND_NUMBERS_BONUS;
   let w = 1.0;
@@ -6519,15 +6521,20 @@ function renderPopularity() {
   // v4.14.0: przy skalibrowanych wagach (Lotto) zakres wskaźnika jest wąski —
   // progi = połowa drogi od neutralnego 1.0 do osiągalnego ekstremum (wyznaczonego
   // z rozkładu wag w puli 49), zamiast dawnych 1.15/0.85, które nigdy by nie odpaliły.
-  const kalPop = (currentGame === 'lotto' || currentGame === 'lottoplus') && typeof POPULARNOSC_KALIBR_JSON !== 'undefined';
+  const kalPool = (currentGame === 'lotto' || currentGame === 'lottoplus') ? 49
+    : (currentGame === 'minilotto') ? 42 : 0;
+  const kalJson = kalPool === 49
+    ? ((typeof POPULARNOSC_KALIBR_JSON !== 'undefined') ? POPULARNOSC_KALIBR_JSON : null)
+    : kalPool === 42
+    ? ((typeof POPULARNOSC_KALIBR_MINI_JSON !== 'undefined') ? POPULARNOSC_KALIBR_MINI_JSON : null)
+    : null;
   let hiT = 1.15, loT = 0.85;
-  if (kalPop) {
-    const k = POPULARNOSC_KALIBR_JSON;
+  if (kalJson) {
     let sumW = 0;
-    for (let i = 1; i <= 49; i++) sumW += popularityWeight(i, 49);
-    const avgW = sumW / 49;
-    const maxScore = (k.w * k.wr) / avgW;  // zestaw samych okrągłych liczb <=31
-    const minScore = 1 / avgW;             // zestaw samych nieokrągłych liczb >31
+    for (let i = 1; i <= kalPool; i++) sumW += popularityWeight(i, kalPool);
+    const avgW = sumW / kalPool;
+    const maxScore = (kalJson.w * kalJson.wr) / avgW;  // zestaw samych okrągłych liczb <=31
+    const minScore = 1 / avgW;                         // zestaw samych nieokrągłych liczb >31
     hiT = 1 + (maxScore - 1) / 2;
     loT = 1 - (1 - minScore) / 2;
   }
@@ -7895,11 +7902,15 @@ function sprzedazLotto() {
   return s;
 }
 
-// v4.14.0: notka o kalibracji wag popularności (zakładka Popularność, Lotto/Lotto Plus).
+// v4.14.0/v4.15.0: notka o kalibracji wag popularności (zakładka Popularność:
+// Lotto/Lotto Plus/Mini Lotto).
 function popularnoscKalibrNote() {
-  const k = (typeof POPULARNOSC_KALIBR_JSON !== 'undefined') ? POPULARNOSC_KALIBR_JSON : null;
   const lottoLike = (typeof currentGame !== 'undefined') && (currentGame === 'lotto' || currentGame === 'lottoplus');
-  if (k && k.w > 1 && lottoLike) {
+  const miniLike = (typeof currentGame !== 'undefined') && currentGame === 'minilotto';
+  const k = lottoLike
+    ? ((typeof POPULARNOSC_KALIBR_JSON !== 'undefined') ? POPULARNOSC_KALIBR_JSON : null)
+    : (miniLike && typeof POPULARNOSC_KALIBR_MINI_JSON !== 'undefined') ? POPULARNOSC_KALIBR_MINI_JSON : null;
+  if (k && k.w > 1 && (lottoLike || miniLike)) {
     const fmt = v => String(v).replace('.', ',');
     return `Wagi skalibrowane empirycznie na ${k.n} losowaniach (liczby zwycięzców z oficjalnego API LOTTO, stan na ${k.stanNa}): waga liczb „urodzinowych" ×${fmt(k.w)}${k.wr > 1.01 ? `, „okrągłych" ×${fmt(k.wr)}` : ''}; dopasowanie na teście r=${fmt(k.corrTest)}.`;
   }
@@ -8316,6 +8327,10 @@ const SPRZEDAZ_JSON = {"m":3400461,"b0":2731003,"b2":3341038,"b5":4375378,"n":60
 // data/wyplaty_lotto.csv) — linia nadpisywana RĘCNIE przez tools/calibrate_popularity.py
 // (nie przez sondę — zmiana stałych modelu wymaga przeglądu).
 const POPULARNOSC_KALIBR_JSON = {"b":0.0296,"w":1.03,"r":0.0163,"wr":1.0165,"n":500,"nTest":100,"corrTrain":0.155,"corrTest":0.262,"hit6Lo":0.26,"hit6Hi":0.2,"stanNa":"04.08.2026"};
+// v4.15.0: empirycznie skalibrowane wagi popularności Mini Lotto (z liczb zwycięzców,
+// data/wyplaty_minilotto.csv) — linia nadpisywana RĘCZNIE przez tools/calibrate_popularity.py
+// (nie przez sondę — zmiana stałych modelu wymaga przeglądu).
+const POPULARNOSC_KALIBR_MINI_JSON = {"b":0.0187,"w":1.0189,"r":0.0101,"wr":1.0101,"n":500,"nTest":100,"corrTrain":0.127,"corrTest":0.153,"hit5Lo":0.7,"hit5Hi":0.78,"stanNa":"04.08.2026"};
 
 async function loadHistData() {
   const binStr = atob(HIST_DATA_B64);
