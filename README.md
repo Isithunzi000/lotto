@@ -68,8 +68,9 @@ i dopisuje nowe losowania. Pliki w repo:
   (źródło domyślnych estymacji 4/6 i 5/6 w zakładce EV; z liczb zwycięzców
   3/4/5-trafień sonda estymuje też sprzedaż zakładów wg głębokości kumulacji
   — presety sprzedaży w panelu „Kumulacja a EV")
-- `data/wyplaty_minilotto.csv` — faktyczne wypłaty Mini Lotto
-  (mediany warunkowe „padła/nie padła 5/5" — szacunek EV w zakładce EV)
+- `data/wyplaty_minilotto.csv` — faktyczne wypłaty Mini Lotto (500 losowań;
+  mediany warunkowe „padła/nie padła 5/5" — szacunek EV w zakładce EV,
+  a liczby zwycięzców 3/4-trafień zasilają kalibrację wag popularności)
 - `data/wyplaty_eurojackpot.csv` — faktyczne wypłaty Eurojackpot
   (średnie i mediany stopni V–XII — szacunek EV niższych stopni;
   kolumna nr to identyfikator losowania z API, nie numer z bazy wyników)
@@ -79,9 +80,12 @@ empirycznej wag modelu popularności zestawów (regresja log-ilorazowa WLS
 na liczbach zwycięzców z API; train/test 80/20). Kalibracja nie jest
 uruchamiana w Actions — zmienia stałe modelu i wymaga ręcznego przeglądu.
 Wynik jest wbudowywany w `index.html` jako `POPULARNOSC_KALIBR_JSON`
-i stosowany wyłącznie dla puli 49 (Lotto / Lotto Plus); pozostałe gry
-używają dotychczasowej heurystyki. Uruchomienie:
-`python3 tools/calibrate_popularity.py` (lub `--dry-run` bez zapisu).
+(Lotto / Lotto Plus, pula 49) i `POPULARNOSC_KALIBR_MINI_JSON` (Mini Lotto,
+pula 42); pozostałe gry używają dotychczasowej heurystyki, bo albo mają
+wygrane stałe (popularność nie wpływa na wypłatę), albo dzielą pulę
+w skali międzynarodowej przy danych tylko polskich (EuroJackpot).
+Uruchomienie: `python3 tools/calibrate_popularity.py [--game lotto|mini|all]`
+(domyślnie obie gry; `--dry-run` bez zapisu).
 
 ## Dane i prywatność
 
