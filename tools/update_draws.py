@@ -7,6 +7,11 @@ Przepływ danych (jeden kierunek, CSV = źródło prawdy):
 
   LOTTO OpenAPI ──→ dopiski do data/*.csv ──→ przebudowa bloba w index.html z CSV
                 ──→ nadpis data/kumulacje.csv (stan bieżący, nie historia)
+                    ──→ wbudowanie kumulacji w index.html (const KUMULACJE_JSON,
+                        czytany przez zakładkę EV kalkulatora; v4.11.0)
+                ──→ dopiski do data/wyplaty_lotto.csv (faktyczne wypłaty per stopień)
+                    ──→ wbudowanie median z 30 losowań w index.html
+                        (const WYPLATY_JSON; v4.12.0)
 
 Zasady:
   * format CSV 1:1 z wynikilotto.net.pl (LF, bez nagłówka, nr z zerami wiodącymi,
@@ -29,6 +34,7 @@ import gzip
 import json
 import os
 import re
+import statistics
 import sys
 import time
 import urllib.error
@@ -89,6 +95,15 @@ JACKPOT_GAMES = [('lotto', 'Lotto'), ('eurojackpot', 'EuroJackpot')]
 # nadajemy sekwencyjnie, kontynuując bazę (tak samo robi wynikilotto).
 ALIGNED_ID_GAMES = {'lotto', 'lotto_plus', 'multi_multi', 'mini_lotto',
                     'ekstra_pensja', 'ekstra_premia'}
+
+# ---------- wypłaty Lotto (v4.12.0) ----------
+# Faktyczne wypłaty per stopień z endpointu draw-prizes — źródło domyślnych
+# „Szac. wygrana czwórka/piątka" w panelu kumulacji kalkulatora.
+WYPLATY_PATH = os.path.join(DATA_DIR, 'wyplaty_lotto.csv')
+WYPLATY_RE = re.compile(r'^const WYPLATY_JSON = \{[^\n]+\};$', re.M)
+WYPLATY_BACKFILL = 60   # losowań wstecz przy pierwszym uruchomieniu
+WYPLATY_MEDIAN_N = 30   # okno mediany dla agregatu wbudowywanego w index.html
+LOTTO_DEG_TO_HITS = {'1': 6, '2': 5, '3': 4, '4': 3}  # stopień API -> trafienia
 
 
 def log(msg):
@@ -298,6 +313,85 @@ def embed_jackpots(jk_csv_text):
     return True
 
 
+# ---------- wypłaty Lotto ----------
+
+def fetch_lotto_prize_rows(draw_id, api_key):
+    """Wiersze CSV wypłat dla losowania Lotto (gameType=Lotto).
+    None = wypłaty jeszcze nieopublikowane — dokończymy przy następnym runie."""
+    items = api_get(f'lotteries/draw-prizes/Lotto/{draw_id}', {}, api_key, fatal=False)
+    if not items:
+        return None
+    lotto = [i for i in items if i.get('gameType') == 'Lotto']
+    if len(lotto) != 1 or lotto[0].get('prizesEmpty'):
+        return None
+    it = lotto[0]
+    dt = datetime.fromisoformat(it['drawDate'].replace('Z', '+00:00')).astimezone(WARSAW)
+    date_pl = dt.strftime('%d.%m.%Y')
+    rows = []
+    for deg in ('1', '2', '3', '4'):
+        p = it['prizes'].get(deg)
+        if p is None:
+            return None
+        rows.append(f'{draw_id},{date_pl},{LOTTO_DEG_TO_HITS[deg]},'
+                    f'{p["prize"]},{p["prizeValue"]:.2f}')
+    return rows
+
+
+def update_wyplaty(api_key):
+    """Dopisuje brakujące wypłaty do data/wyplaty_lotto.csv (append-only,
+    po numerze losowania). Zwraca True przy dopisku."""
+    _, lotto_records = load_csv('lotto')
+    last_nr = int(lotto_records[-1][0])
+    existing = []
+    if os.path.exists(WYPLATY_PATH):
+        with open(WYPLATY_PATH, encoding='utf-8') as f:
+            existing = [l.rstrip('\n') for l in f if l.strip()]
+    last_done = int(existing[-1].split(',')[0]) if existing else last_nr - WYPLATY_BACKFILL
+    new_rows = []
+    nr = last_done + 1
+    while nr <= last_nr:
+        rows = fetch_lotto_prize_rows(nr, api_key)
+        if rows is None:
+            log(f'  wypłaty: nr {nr} jeszcze nieopublikowane — dokończę później')
+            break
+        new_rows.extend(rows)
+        time.sleep(REQUEST_PAUSE_S)
+        nr += 1
+    if not new_rows:
+        return False
+    with open(WYPLATY_PATH, 'a', encoding='utf-8', newline='') as f:
+        f.write('\n'.join(new_rows) + '\n')
+    log(f'wyplaty_lotto.csv: +{len(new_rows)} wierszy (do nr {new_rows[-1].split(",")[0]})')
+    return True
+
+
+def embed_wyplaty():
+    """Mediana wypłat 4/6 i 5/6 z WYPLATY_MEDIAN_N ostatnich losowań ->
+    const WYPLATY_JSON w index.html (stała kolejność kluczy)."""
+    by_nr = {}
+    with open(WYPLATY_PATH, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            nr, date, hits, _cnt, kwota = line.split(',')
+            by_nr.setdefault(int(nr), {'date': date})[hits] = float(kwota)
+    last_nrs = sorted(by_nr)[-WYPLATY_MEDIAN_N:]
+    data = {'t4': round(statistics.median(by_nr[n]['4'] for n in last_nrs), 2),
+            't5': round(statistics.median(by_nr[n]['5'] for n in last_nrs), 2),
+            'n': len(last_nrs), 'stanNa': by_nr[last_nrs[-1]]['date']}
+    const_line = 'const WYPLATY_JSON = ' + json.dumps(
+        data, ensure_ascii=False, separators=(',', ':')) + ';'
+    src = open(INDEX_PATH, encoding='utf-8').read()
+    new_src, n = WYPLATY_RE.subn(lambda _: const_line, src, count=1)
+    if n != 1:
+        fail('nie znaleziono zakotwiczonej linii WYPLATY_JSON w index.html')
+    if new_src == src:
+        return False
+    open(INDEX_PATH, 'w', encoding='utf-8').write(new_src)
+    return True
+
+
 # ---------- przebieg główny ----------
 
 def main():
@@ -390,10 +484,17 @@ def main():
         if jk_embedded:
             log('index.html: wbudowano zaktualizowane kumulacje (KUMULACJE_JSON)')
 
+    # Wypłaty Lotto (v4.12.0, soft-fail: błąd nie blokuje wyników)
+    wyplaty_changed = update_wyplaty(api_key)
+    wyplaty_embedded = embed_wyplaty() if os.path.exists(WYPLATY_PATH) else False
+    if wyplaty_embedded:
+        log('index.html: wbudowano zaktualizowane mediany wypłat (WYPLATY_JSON)')
+
     # Przebudowa bloba z CSV (zawsze z aktualnych plików)
     blob_changed = rebuild_blob() if total_added > 0 else False
 
-    if total_added == 0 and not jackpots_changed and not jk_embedded:
+    if (total_added == 0 and not jackpots_changed and not jk_embedded
+            and not wyplaty_changed and not wyplaty_embedded):
         log('Brak nowych danych — repo bez zmian.')
         write_github_output('false', '')
         return
@@ -406,8 +507,11 @@ def main():
         summary = f'data: wyniki do {through.strftime("%d.%m.%Y")}'
         log(f'Dopisano łącznie {total_added} losowań. Blob przebudowany: {blob_changed}.')
     else:
-        summary = 'data: kumulacje ' + ', '.join(l.split(',')[0] + ' ' + l.split(',')[1]
-                                                 for l in jk.strip().split('\n'))
+        if jackpots_changed or jk_embedded:
+            summary = 'data: kumulacje ' + ', '.join(l.split(',')[0] + ' ' + l.split(',')[1]
+                                                     for l in jk.strip().split('\n'))
+        else:
+            summary = 'data: wypłaty lotto (mediana 30 losowań)'
         log(summary)
     write_github_output('true', summary)
 

@@ -16,14 +16,15 @@ kalkulator działa w 100% offline, bez serwera i bez instalacji.
 - **Multi Multi** (z promocjami okresowymi wg regulaminów TS)
 - **Eurojackpot**
 - **Mini Lotto**
-- **Ekstra Pensja**
+- **Ekstra Pensja** (w tym Ekstra Premia)
 
 ## Funkcje
 
 ### EV — pełne rozbicie
 Dokładne wyliczenie wartości oczekiwanej i RTP z rozbiciem na wszystkie
-stopnie wygranych. Uwzględnia kumulacje, promocje okresowe w Multi Multi
-(włączane/wyłączane zgodnie z datami obowiązywania w regulaminach) oraz
+stopnie wygranych. Uwzględnia kumulacje (aktualizowane automatycznie
+z oficjalnego API LOTTO), promocje okresowe w Multi Multi
+(włączane ręcznie zgodnie z datami obowiązywania w regulaminach) oraz
 pełne tabele wygranych.
 
 ### Ranking gier wg RTP
@@ -43,6 +44,7 @@ rozbicie większej puli liczb na zakłady proste z gwarancjami trafień.
 ### Historia losowań
 Przeglądanie archiwalnych wyników ze statystykami częstotliwościowymi
 i wagami opartymi na danych z ostatnich 12 miesięcy lub całej historii.
+Import CSV z własnych źródeł jako opcja aktualizacji/backupu.
 
 ### Laboratorium
 Raporty syntetyczne i testy parametrów wejścia (wagi, zakresy dat) —
@@ -53,19 +55,29 @@ kroczących, z podaniem najlepszych konfiguracji.
 Symulacja budżetu na wybraną grę — ile zakładów, jakim kosztem,
 z jaką wartością oczekiwaną.
 
+## Aktualizacja danych
+
+Baza wyników jest zaszyta w aplikacji i aktualizowana automatycznie —
+sonda (GitHub Actions, 3× dziennie) odpytuje oficjalne LOTTO OpenAPI
+i dopisuje nowe losowania. Pliki w repo:
+
+- `data/*.csv` — pełna historia wyników 7 gier, format 1:1
+  z wynikilotto.net.pl (zweryfikowane, bez historycznych błędów)
+- `data/kumulacje.csv` — aktualne kumulacje Lotto i Eurojackpot
+- `data/wyplaty_lotto.csv` — faktyczne wypłaty per stopień dla Lotto
+  (źródło domyślnych estymacji 4/6 i 5/6 w zakładce EV)
+
 ## Dane i prywatność
 
 - Wszystkie obliczenia odbywają się lokalnie w przeglądarce.
 - Zapisane parametry i ustawienia trzymane są wyłącznie na urządzeniu
   użytkownika (localStorage) — nic nie jest wysyłane na zewnątrz.
-- Baza wyników zaszyta w aplikacji; planowana automatyczna aktualizacja
-  z oficjalnych źródeł.
 
 ## Licencja
 
 Patrz plik [LICENSE](LICENSE).
 
-## Changelog
+## Historia zmian
 
-### v4.10.0 (2026-07-25)
-- Pierwsza wersja opublikowana na GitHub Pages
+Historia wersji prowadzona jest w commitach na gałęzi `main` — każdy commit
+wersji ma numer i opis w komunikacie; wydania oznaczone są tagami `v*`.
