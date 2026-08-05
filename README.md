@@ -10,6 +10,10 @@ regulaminy, tabele wygranych, kumulacje oraz promocje okresowe.
 Można też pobrać `index.html` i otworzyć lokalnie w przeglądarce —
 kalkulator działa w 100% offline, bez serwera i bez instalacji.
 
+**Stan projektu (hand-off dla nowych sesji/współpracowników):**
+[STATUS.md](STATUS.md) — aktualna wersja, opis automatyki, zasady pracy
+i zaległości; aktualizowany w commicie każdej większej zmiany.
+
 ## Obsługiwane gry
 
 - **Lotto** (w tym Lotto Plus)
