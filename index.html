@@ -569,7 +569,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.15.1 | 05-08-2026</div>
+    <div class="version-tag">v4.15.2 | 05-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -852,7 +852,8 @@
         Pełne archiwum wyników 7 gier Totalizatora (1957–2026, dane oficjalne).
       </div>
 
-      <div id="histFreshness" class="fresh-line" style="display: block;">● <b>Lotto</b>: dane na <b style="white-space:nowrap">23.07.2026</b> <span style="white-space:nowrap">(wczoraj)</span> · źródło: import (plik goły)</div>
+      <!-- v4.15.2: statyk neutralny — JS (renderFreshness) wstrzykuje żywą datę i źródło -->
+      <div id="histFreshness" class="fresh-line" style="display: block;">● Historia losowań: dane wbudowane — aktualizowane automatycznie z oficjalnego API LOTTO</div>
 
       <div class="subsection open" id="dataUpdatePanel">
         <div class="collapse-head" onclick="toggleCollapse('dataUpdatePanel')">
@@ -2148,19 +2149,20 @@
     </div>
     <label class="field-label">Aktualna kumulacja I stopnia</label>
     <div class="jk-pool-val">3 000 000 zł</div>
-    <div class="age-note">Dane z oficjalnego API LOTTO, aktualizowane automatycznie — stan na 06.08.2026.</div>
+    <!-- v4.15.2: statyk bez zamrożonej daty — JS wstrzykuje żywą (data najbliższego losowania) -->
+    <div class="age-note">Dane z oficjalnego API LOTTO, aktualizowane automatycznie.</div>
     <details class="adv" style="margin-top:10px;">
       <summary>Ustawienia zaawansowane — domyślne wartości wystarczą w większości przypadków</summary>
       <label class="field-label" style="margin-top:12px;">Szacowana sprzedaż zakładów</label>
       <select id="jkSales"><!-- v4.15.1: presety = SPRZEDAZ_JSON (zmierzone mediany) --><option value="2731003">~2,7 mln (po świeżej szóstce)</option><option value="3341038" selected="">~3,3 mln (typowa kumulacja)</option><option value="4375378">~4,4 mln (głęboka kumulacja)</option><option value="custom">Własna wartość…</option></select>
       <input type="number" id="jkSalesCustom" class="hidden" placeholder="liczba zakładów" style="margin-top:8px;" value="5000000"><!-- v4.15.1: default 5 mln (≠ presetów sprzedaży) -->
-      <div class="age-note">Presety = zmierzona sprzedaż: mediana estymacji z liczb zwycięzców w 60 ostatnich losowaniach, wg głębokości kumulacji (oficjalne API LOTTO, stan na 04.08.2026); domyślny kubełek dobrany do aktualnej puli. Szacunek — sprzedaż zmienia wynik tylko nieznacznie. Dla dociekliwych: Totalizator podaje sprzedaż (w zł) przy każdym wyniku na <a class="link-inline" href="https://www.lotto.pl/lotto/wyniki-i-wygrane" target="_blank" rel="noopener">lotto.pl → wyniki i wygrane</a> — podziel ją przez 3 zł i masz liczbę zakładów.</div>
+      <div class="age-note">Presety = zmierzona sprzedaż: mediana estymacji z liczb zwycięzców w 60 ostatnich losowaniach, wg głębokości kumulacji (oficjalne API LOTTO); domyślny kubełek dobrany do aktualnej puli. Szacunek — sprzedaż zmienia wynik tylko nieznacznie. Dla dociekliwych: Totalizator podaje sprzedaż (w zł) przy każdym wyniku na <a class="link-inline" href="https://www.lotto.pl/lotto/wyniki-i-wygrane" target="_blank" rel="noopener">lotto.pl → wyniki i wygrane</a> — podziel ją przez 3 zł i masz liczbę zakładów.</div>
       
       <div class="jackpot-grid">
         <div><label class="field-label">Szac. wygrana „czwórka" (zł)</label><input type="number" id="jkT4" value="163.75" min="36" step="1"></div>
         <div><label class="field-label">Szac. wygrana „piątka" (zł)</label><input type="number" id="jkT5" value="5874.5" min="0" step="100"></div>
       </div>
-      <div class="age-note">Wartości domyślne = mediana faktycznych wypłat z 30 ostatnich losowań (oficjalne API LOTTO, stan na 04.08.2026). Dokładne wypłaty per stopień zobaczysz po kliknięciu losowania na <a class="link-inline" href="https://www.wynikilotto.net.pl/lotto/wyniki/" target="_blank" rel="noopener">wynikilotto.net.pl → Lotto → wygrane i wyniki</a>.</div>
+      <div class="age-note">Wartości domyślne = mediana faktycznych wypłat z 30 ostatnich losowań (oficjalne API LOTTO). Dokładne wypłaty per stopień zobaczysz po kliknięciu losowania na <a class="link-inline" href="https://www.wynikilotto.net.pl/lotto/wyniki/" target="_blank" rel="noopener">wynikilotto.net.pl → Lotto → wygrane i wyniki</a>.</div>
       <label class="check-row" style="margin-top:12px;">
         <input type="checkbox" id="jkTax" checked="">
         Uwzględnij podatek 10% od wygranych powyżej 2280 zł
@@ -7960,7 +7962,7 @@ function jackpotPanelHtml(key) {
     </div>
     <label class="field-label">Aktualna kumulacja I stopnia</label>
     <div class="jk-pool-val">${Math.round(pool).toLocaleString('pl-PL')} zł</div>
-    <div class="age-note">${poolDate ? `Dane z oficjalnego API LOTTO, aktualizowane automatycznie — stan na ${poolDate}.` : 'Wartość orientacyjna — brak wbudowanych danych o kumulacji.'}</div>
+    <div class="age-note">${poolDate ? `Dane z oficjalnego API LOTTO, aktualizowane automatycznie — kumulacja na najbliższe losowanie (${poolDate}).` : 'Wartość orientacyjna — brak wbudowanych danych o kumulacji.'}</div>
     <details class="adv" style="margin-top:10px;">
       <summary>Ustawienia zaawansowane — domyślne wartości wystarczą w większości przypadków</summary>
       <label class="field-label" style="margin-top:12px;">Szacowana sprzedaż zakładów${isLotto ? '' : ' (cała Europa)'}</label>
