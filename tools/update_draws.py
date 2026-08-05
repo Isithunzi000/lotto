@@ -34,6 +34,7 @@ Kody wyjścia: 0 = OK (także gdy brak nowości), 1 = błąd.
 import base64
 import gzip
 import json
+import math
 import os
 import re
 import statistics
@@ -119,6 +120,16 @@ WYPLATY_EJ_BACKFILL = 40  # EJ: 2 losowania/tydz. — 40 ~= 20 tygodni
 MINI_DEG_KEYS = ('1', '2', '3')              # 1=5/5, 2=4/5, 3=3/5
 EJ_DEG_KEYS = tuple(str(i) for i in range(1, 13))   # stopnie I-XII
 EJ_EMBED_DEGS = range(5, 13)                 # do embeda: V-XII (I-IV zbyt rzadkie/zmienne)
+
+# ---------- sprzedaż zakładów Lotto (v4.14.0) ----------
+# Estymacja z liczb zwycięzców (wyplaty_lotto.csv): sprzedaż ~= zwycięzcy / p.
+# Szum Poissona przy ~38 tys. zwycięzców 3/6 to ~0,5% — zmienność między
+# losowaniami to realna zmienność sprzedaży (rośnie z głębokością kumulacji).
+SPRZEDAZ_PATH = None  # brak osobnego CSV — liczone czysto z wyplaty_lotto.csv
+SPRZEDAZ_RE = re.compile(r'^const SPRZEDAZ_JSON = \{[^\n]+\};$', re.M)
+SPRZEDAZ_WINDOW = 60  # ostatnich losowań (~5 mies.) — sprzedaż dryfuje w skali roku
+LOTTO_P345 = (math.comb(6, 3) * math.comb(43, 3) + math.comb(6, 4) * math.comb(43, 2)
+              + math.comb(6, 5) * math.comb(43, 1)) / math.comb(49, 6)
 LOTTO_DEG_TO_HITS = {'1': 6, '2': 5, '3': 4, '4': 3}  # stopień API -> trafienia
 
 
@@ -541,6 +552,41 @@ def fetch_ej_last_api_id(api_key):
     return sid if isinstance(sid, int) else None
 
 
+def embed_sprzedaz():
+    """Estymowana sprzedaż zakładów Lotto ze SPRZEDAZ_WINDOW ostatnich losowań
+    (wyplaty_lotto.csv): mediana ogólna + mediany kubełkowe wg głębokości
+    kumulacji (seria losowań bez trafienia 6/6: b0 = 0-1, b2 = 2-4, b5 = 5+).
+    -> const SPRZEDAZ_JSON w index.html (stała kolejność kluczy)."""
+    by_nr = {}
+    with open(WYPLATY_PATH, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            nr, date, hits, cnt, _kwota = line.split(',')
+            by_nr.setdefault(int(nr), {'date': date})[int(hits)] = int(cnt)
+    last_nrs = sorted(by_nr)[-SPRZEDAZ_WINDOW:]
+    sales_all = []
+    buckets = {'b0': [], 'b2': [], 'b5': []}
+    streak = 0
+    for nr in last_nrs:
+        w = by_nr[nr]
+        if not all(h in w for h in (3, 4, 5, 6)):
+            continue
+        sales = (w[3] + w[4] + w[5]) / LOTTO_P345
+        sales_all.append(sales)
+        buckets['b0' if streak <= 1 else ('b2' if streak <= 4 else 'b5')].append(sales)
+        streak = 0 if w[6] > 0 else streak + 1
+    if not sales_all:
+        fail('sprzedaż: brak kompletnych losowań w oknie — sprawdź wyplaty_lotto.csv')
+    def med(vals):
+        return round(statistics.median(vals)) if vals else None
+    data = {'m': med(sales_all),
+            'b0': med(buckets['b0']), 'b2': med(buckets['b2']), 'b5': med(buckets['b5']),
+            'n': len(sales_all), 'stanNa': by_nr[last_nrs[-1]]['date']}
+    return _embed_const('SPRZEDAZ_JSON', SPRZEDAZ_RE, data)
+
+
 # ---------- przebieg główny ----------
 
 def main():
@@ -657,13 +703,19 @@ def main():
     else:
         log('  wypłaty EuroJackpot: nie udało się pobrać ostatniego ID — pomijam')
 
+    # Sprzedaż zakładów Lotto (v4.14.0) — czysta funkcja wyplaty_lotto.csv
+    sprzedaz_embedded = embed_sprzedaz() if os.path.exists(WYPLATY_PATH) else False
+    if sprzedaz_embedded:
+        log('index.html: wbudowano estymacje sprzedaży (SPRZEDAZ_JSON)')
+
     # Przebudowa bloba z CSV (zawsze z aktualnych plików)
     blob_changed = rebuild_blob() if total_added > 0 else False
 
     if (total_added == 0 and not jackpots_changed and not jk_embedded
             and not wyplaty_changed and not wyplaty_embedded
             and not mini_changed and not mini_embedded
-            and not ej_changed and not ej_embedded):
+            and not ej_changed and not ej_embedded
+            and not sprzedaz_embedded):
         log('Brak nowych danych — repo bez zmian.')
         write_github_output('false', '')
         return

@@ -569,7 +569,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.13.0 | 05-08-2026</div>
+    <div class="version-tag">v4.14.0 | 05-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -2067,7 +2067,7 @@
       <div class="stat"><div class="k">Ocena</div><div class="v dim" style="color:var(--warn)">Bardziej popularny niż przeciętny</div></div>
     </div>
     <div class="score-bar"><div class="fill" style="width:60.8009024252679%"></div><div class="mid-marker" style="left:50%"></div></div>
-    <div class="note">Zestaw: 7, 14, 21, 28, 35, 42. Wskaźnik 1.0 = przeciętna popularność. Wyższy = zestaw prawdopodobnie wybierany częściej przez innych graczy (daty urodzin, liczby "okrągłe"). Wskaźnik nie zmienia szansy trafienia — mówi tylko, z iloma osobami dzielisz pulę. Szacunek behawioralny, nie dane pomiarowe Totalizatora.</div>
+    <div class="note">Zestaw: 7, 14, 21, 28, 35, 42. Wskaźnik 1.0 = przeciętna popularność. Wyższy = zestaw prawdopodobnie wybierany częściej przez innych graczy (daty urodzin, liczby "okrągłe"). Wskaźnik nie zmienia szansy trafienia — mówi tylko, z iloma osobami dzielisz pulę. Wagi skalibrowane empirycznie na losowaniach z oficjalnego API LOTTO.</div>
   </div>
 
       <div class="subsection" id="popModesPanel" style="margin-top:14px;">
@@ -2757,18 +2757,23 @@ const BIRTHDAY_MAX = 31, BIRTHDAY_WEIGHT = 3.0;
 const ROUND_NUMBERS_BONUS = 1.3;
 const ROUND_NUMBERS = new Set([7,13,14,17,21,22,27,28]);
 
-function popularityWeight(n) {
+// v4.14.0: dla puli 49 (Lotto) wagi pochodzą z kalibracji empirycznej na liczbach
+// zwycięzców z API (POPULARNOSC_KALIBR_JSON); dla pozostałych gier — heurystyka.
+function popularityWeight(n, poolSize) {
+  const k = (poolSize === 49 && typeof POPULARNOSC_KALIBR_JSON !== 'undefined') ? POPULARNOSC_KALIBR_JSON : null;
+  const bw = (k && k.w > 1) ? k.w : BIRTHDAY_WEIGHT;
+  const rw = (k && k.wr > 0) ? k.wr : ROUND_NUMBERS_BONUS;
   let w = 1.0;
-  if (n <= BIRTHDAY_MAX) w *= BIRTHDAY_WEIGHT;
-  if (ROUND_NUMBERS.has(n)) w *= ROUND_NUMBERS_BONUS;
+  if (n <= BIRTHDAY_MAX) w *= bw;
+  if (ROUND_NUMBERS.has(n)) w *= rw;
   return w;
 }
 
 function popularityScore(numbers, poolSize) {
   let totalAll = 0;
-  for (let i = 1; i <= poolSize; i++) totalAll += popularityWeight(i);
+  for (let i = 1; i <= poolSize; i++) totalAll += popularityWeight(i, poolSize);
   const avgAll = totalAll / poolSize;
-  const avgOurs = numbers.reduce((s, n) => s + popularityWeight(n), 0) / numbers.length;
+  const avgOurs = numbers.reduce((s, n) => s + popularityWeight(n, poolSize), 0) / numbers.length;
   return avgOurs / avgAll;
 }
 
@@ -2940,7 +2945,7 @@ function weightedSampleWithoutReplacement(pool, k, weightFn) {
 }
 
 function popularityWeightForPool(n, pool) {
-  if (pool === 49 || pool === 50 || pool === 42 || pool === 35) return popularityWeight(n);
+  if (pool === 49 || pool === 50 || pool === 42 || pool === 35) return popularityWeight(n, pool);  // v4.14.0: pula przekazywana (kalibracja Lotto)
   if (pool === 80) return n <= 31 ? BIRTHDAY_WEIGHT : (ROUND_NUMBERS.has(n) ? ROUND_NUMBERS_BONUS : 1.0);
   if (pool === 12) return ROUND_NUMBERS.has(n) ? ROUND_NUMBERS_BONUS : 1.0;
   return 1.0;
@@ -6511,8 +6516,23 @@ function renderPopularity() {
   }
 
   const pct = Math.min(100, (score / 2) * 100);
-  const label = score > 1.15 ? 'Bardziej popularny niż przeciętny' : (score < 0.85 ? 'Mniej popularny niż przeciętny' : 'Zbliżony do przeciętnego');
-  const labelColor = score > 1.15 ? 'var(--warn)' : (score < 0.85 ? 'var(--good)' : 'var(--ink-dim)');
+  // v4.14.0: przy skalibrowanych wagach (Lotto) zakres wskaźnika jest wąski —
+  // progi = połowa drogi od neutralnego 1.0 do osiągalnego ekstremum (wyznaczonego
+  // z rozkładu wag w puli 49), zamiast dawnych 1.15/0.85, które nigdy by nie odpaliły.
+  const kalPop = (currentGame === 'lotto' || currentGame === 'lottoplus') && typeof POPULARNOSC_KALIBR_JSON !== 'undefined';
+  let hiT = 1.15, loT = 0.85;
+  if (kalPop) {
+    const k = POPULARNOSC_KALIBR_JSON;
+    let sumW = 0;
+    for (let i = 1; i <= 49; i++) sumW += popularityWeight(i, 49);
+    const avgW = sumW / 49;
+    const maxScore = (k.w * k.wr) / avgW;  // zestaw samych okrągłych liczb <=31
+    const minScore = 1 / avgW;             // zestaw samych nieokrągłych liczb >31
+    hiT = 1 + (maxScore - 1) / 2;
+    loT = 1 - (1 - minScore) / 2;
+  }
+  const label = score > hiT ? 'Bardziej popularny niż przeciętny' : (score < loT ? 'Mniej popularny niż przeciętny' : 'Zbliżony do przeciętnego');
+  const labelColor = score > hiT ? 'var(--warn)' : (score < loT ? 'var(--good)' : 'var(--ink-dim)');
 
   el.innerHTML = `
     <div class="stat-grid">
@@ -6520,7 +6540,7 @@ function renderPopularity() {
       <div class="stat"><div class="k">Ocena</div><div class="v dim" style="color:${labelColor}">${label}</div></div>
     </div>
     <div class="score-bar"><div class="fill" style="width:${pct}%"></div><div class="mid-marker" style="left:50%"></div></div>
-    <div class="note">${detail}. Wskaźnik 1.0 = przeciętna popularność. Wyższy = zestaw prawdopodobnie wybierany częściej przez innych graczy (daty urodzin, liczby "okrągłe"). Wskaźnik nie zmienia szansy trafienia — mówi tylko, z iloma osobami dzielisz pulę. Szacunek behawioralny, nie dane pomiarowe Totalizatora.</div>
+    <div class="note">${detail}. Wskaźnik 1.0 = przeciętna popularność. Wyższy = zestaw prawdopodobnie wybierany częściej przez innych graczy (daty urodzin, liczby "okrągłe"). Wskaźnik nie zmienia szansy trafienia — mówi tylko, z iloma osobami dzielisz pulę. ${popularnoscKalibrNote()}</div>
   `;
 }
 
@@ -7868,15 +7888,41 @@ function ejTypicalPayoutsHtml() {
   return `<div class="age-note" style="margin-top:8px;">Typowe wypłaty niższych stopni (mediana z ${w.n || 30} ostatnich losowań, oficjalne API LOTTO, stan na ${w.stanNa || '—'}): ${parts.join(' · ')}. Stopnie II–IV trafiają zbyt rzadko, by podać wiarygodną medianę.</div>`;
 }
 
+// v4.14.0: zmierzona sprzedaż zakładów Lotto (SPRZEDAZ_JSON) — presety panelu kumulacji.
+function sprzedazLotto() {
+  const s = (typeof SPRZEDAZ_JSON !== 'undefined') ? SPRZEDAZ_JSON : null;
+  if (!s || !(s.b0 > 0) || !(s.b2 > 0) || !(s.b5 > 0)) return null;
+  return s;
+}
+
+// v4.14.0: notka o kalibracji wag popularności (zakładka Popularność, Lotto/Lotto Plus).
+function popularnoscKalibrNote() {
+  const k = (typeof POPULARNOSC_KALIBR_JSON !== 'undefined') ? POPULARNOSC_KALIBR_JSON : null;
+  const lottoLike = (typeof currentGame !== 'undefined') && (currentGame === 'lotto' || currentGame === 'lottoplus');
+  if (k && k.w > 1 && lottoLike) {
+    const fmt = v => String(v).replace('.', ',');
+    return `Wagi skalibrowane empirycznie na ${k.n} losowaniach (liczby zwycięzców z oficjalnego API LOTTO, stan na ${k.stanNa}): waga liczb „urodzinowych" ×${fmt(k.w)}${k.wr > 1.01 ? `, „okrągłych" ×${fmt(k.wr)}` : ''}; dopasowanie na teście r=${fmt(k.corrTest)}.`;
+  }
+  return 'Szacunek behawioralny, nie dane pomiarowe Totalizatora.';
+}
+
 function jackpotPanelHtml(key) {
   const s = loadJackpotState(key);
   const isLotto = key === 'lotto';
   const pool = jackpotPoolValue(key);
   const poolDate = jackpotPoolDate(key);
+  // v4.14.0: presety sprzedaży Lotto = zmierzone mediany wg głębokości kumulacji
+  // (SPRZEDAZ_JSON); domyślny kubełek dobrany do aktualnej puli. Fallback = dawne
+  // orientacyjne presety. EJ bez zmian (API nie publikuje sprzedaży europejskiej).
+  const sp = isLotto ? sprzedazLotto() : null;
+  const fmtMln = v => (v / 1e6).toFixed(1).replace('.', ',') + ' mln';
   const salesOpts = isLotto
-    ? [[1000000, '~1 mln (spokojne losowanie)'], [3000000, '~3 mln (typowe)'], [8000000, '~8 mln (wysoka kumulacja)'], [15000000, '~15 mln (rekordowa)']]
+    ? (sp
+      ? [[sp.b0, `~${fmtMln(sp.b0)} (po świeżej szóstce)`], [sp.b2, `~${fmtMln(sp.b2)} (typowa kumulacja)`], [sp.b5, `~${fmtMln(sp.b5)} (głęboka kumulacja)`]]
+      : [[1000000, '~1 mln (spokojne losowanie)'], [3000000, '~3 mln (typowe)'], [8000000, '~8 mln (wysoka kumulacja)'], [15000000, '~15 mln (rekordowa)']])
     : [[10000000, '~10 mln (spokojne losowanie)'], [30000000, '~30 mln (typowe)'], [60000000, '~60 mln (wysoka kumulacja)'], [100000000, '~100 mln (rekordowa)']];
-  const salesSel = s.salesSel || String(salesOpts[1][0]);
+  const autoSalesSel = sp ? String(pool <= 2500000 ? sp.b0 : (pool <= 6000000 ? sp.b2 : sp.b5)) : String(salesOpts[1][0]);
+  const salesSel = s.salesSel || autoSalesSel;
   const optsHtml = salesOpts.map(([v, label]) =>
     `<option value="${v}" ${String(v) === salesSel ? 'selected' : ''}>${label}</option>`).join('') +
     `<option value="custom" ${salesSel === 'custom' ? 'selected' : ''}>Własna wartość…</option>`;
@@ -7898,7 +7944,7 @@ function jackpotPanelHtml(key) {
       <label class="field-label" style="margin-top:12px;">Szacowana sprzedaż zakładów${isLotto ? '' : ' (cała Europa)'}</label>
       <select id="jkSales">${optsHtml}</select>
       <input type="number" id="jkSalesCustom" class="${salesSel === 'custom' ? '' : 'hidden'}" placeholder="liczba zakładów" style="margin-top:8px;" value="${s.salesCustom || 5000000}"><!-- v4.9.0: default 5 mln (≠ presetów 1/3/8/15 mln) -->
-      <div class="age-note">Nie musisz tego szukać — preset „typowe" wystarczy; sprzedaż zmienia wynik tylko nieznacznie. Dla dociekliwych: Totalizator podaje sprzedaż (w zł) przy każdym wyniku na <a class="link-inline" href="https://www.lotto.pl/lotto/wyniki-i-wygrane" target="_blank" rel="noopener">lotto.pl → wyniki i wygrane</a> — podziel ją przez ${isLotto ? '3 zł' : '12,50 zł'} i masz liczbę zakładów.${isLotto ? '' : ' Dla Eurojackpot liczy się sprzedaż ogólnoeuropejska (niepublikowana oficjalnie) — preset to rząd wielkości.'}</div>
+      <div class="age-note">${sp ? `Presety = zmierzona sprzedaż: mediana estymacji z liczb zwycięzców w ${sp.n} ostatnich losowaniach, wg głębokości kumulacji (oficjalne API LOTTO, stan na ${sp.stanNa}); domyślny kubełek dobrany do aktualnej puli. Szacunek — sprzedaż zmienia wynik tylko nieznacznie.` : `Nie musisz tego szukać — preset „typowe" wystarczy; sprzedaż zmienia wynik tylko nieznacznie.`} Dla dociekliwych: Totalizator podaje sprzedaż (w zł) przy każdym wyniku na <a class="link-inline" href="https://www.lotto.pl/lotto/wyniki-i-wygrane" target="_blank" rel="noopener">lotto.pl → wyniki i wygrane</a> — podziel ją przez ${isLotto ? '3 zł' : '12,50 zł'} i masz liczbę zakładów.${isLotto ? '' : ' Dla Eurojackpot liczy się sprzedaż ogólnoeuropejska (niepublikowana oficjalnie) — preset to rząd wielkości.'}</div>
       ${isLotto ? `
       <div class="jackpot-grid">
         <div><label class="field-label">Szac. wygrana „czwórka" (zł)</label><input type="number" id="jkT4" value="${s.t4 !== undefined ? s.t4 : wyplataDefault(4)}" min="36" step="1"></div>
@@ -8262,6 +8308,14 @@ const WYPLATY_JSON = {"t4":163.75,"t5":5874.5,"n":30,"stanNa":"04.08.2026"};
 // (oficjalne API LOTTO) — linie nadpisywane automatycznie przez tools/update_draws.py.
 const WYPLATY_MINI_JSON = {"p3p":31.65,"p3b":63.75,"p4p":756.35,"p4b":1629.0,"w":0.8,"p5":395582.2,"n":30,"stanNa":"04.08.2026"};
 const WYPLATY_EJ_JSON = {"a5":4471.48,"m5":1497.85,"a6":694.11,"m6":739.4,"a7":487.56,"m7":534.2,"a8":110.42,"m8":113.3,"a9":87.64,"m9":89.65,"a10":74.32,"m10":77.35,"a11":54.84,"m11":56.1,"a12":43.12,"m12":44.4,"n":30,"stanNa":"04.08.2026"};
+// v4.14.0: estymowana sprzedaż zakładów Lotto (z liczb zwycięzców, wyplaty_lotto.csv):
+// m = mediana ogólna, b0/b2/b5 = mediany wg głębokości kumulacji (seria bez 6/6:
+// 0-1 / 2-4 / 5+ losowań) — linia nadpisywana automatycznie przez tools/update_draws.py.
+const SPRZEDAZ_JSON = {"m":3400461,"b0":2731003,"b2":3341038,"b5":4375378,"n":60,"stanNa":"04.08.2026"};
+// v4.14.0: empirycznie skalibrowane wagi popularności Lotto (z liczb zwycięzców,
+// data/wyplaty_lotto.csv) — linia nadpisywana RĘCNIE przez tools/calibrate_popularity.py
+// (nie przez sondę — zmiana stałych modelu wymaga przeglądu).
+const POPULARNOSC_KALIBR_JSON = {"b":0.0296,"w":1.03,"r":0.0163,"wr":1.0165,"n":500,"nTest":100,"corrTrain":0.155,"corrTest":0.262,"hit6Lo":0.26,"hit6Hi":0.2,"stanNa":"04.08.2026"};
 
 async function loadHistData() {
   const binStr = atob(HIST_DATA_B64);
