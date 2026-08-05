@@ -569,7 +569,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.12.0 | 05-08-2026</div>
+    <div class="version-tag">v4.13.0 | 05-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -2654,7 +2654,7 @@ function eurojackpotEv() {
     game: "Eurojackpot", cost: EUROJACKPOT_BET_PRICE,
     guaranteedEv: 0, guaranteedPct: 0,
     minRtpPct: EUROJACKPOT_MIN_RTP * 100, exact: false,
-    unknownTiers: "wszystkie 12 stopni (I–XII)",
+    unknownTiers: "stopnie II–IV (zbyt rzadkie i zmienne do estymacji); V–XII szacowane z realnych wypłat API",  // v4.13.0
     jackpotOdds: eurojackpotJackpotOdds(),
   };
 }
@@ -2669,12 +2669,20 @@ function minilottoEv() {
   // stopni ma tylko DOLNY PROG regulaminowy = 1x stawka (1,60 zl), § 22 pkt 1-2.
   const p5 = minilottoHitPmf(5), p4 = minilottoHitPmf(4), p3 = minilottoHitPmf(3);
   const floorContribution = (p5 + p4 + p3) * MINILOTTO_TIER_FLOOR;
+  // v4.13.0: szacunek EV z realnych wypłat (API LOTTO) — średnia ważona scenariuszy
+  // „padła/nie padła 5/5" dla 3/5 i 4/5 + mediana wypłaty I stopnia (zakładamy
+  // jednego zwycięzcę; przy kilku wypłata jest dzielona). Ranking gier celowo
+  // dalej używa minRtpPct — regulaminowa, porównywalna baza dla wszystkich gier.
+  const mw = miniWyplaty();
+  const estEv = mw ? p3 * mw.p3 + p4 * mw.p4 + p5 * mw.p5 : null;
   return {
     game: "Mini Lotto", cost: MINILOTTO_BET_PRICE,
     guaranteedEv: 0, guaranteedPct: 0,  // brak stalej kwoty analogicznej do Lotto "trojki"
     tierFloorContribution: floorContribution,
     tierFloorPct: floorContribution / MINILOTTO_BET_PRICE * 100,
     minRtpPct: MINILOTTO_MIN_RTP * 100, exact: false,
+    estEv, estRtpPct: estEv !== null ? estEv / MINILOTTO_BET_PRICE * 100 : null,
+    miniW: mw,
     unknownTiers: "5/5 (I stopień), 4/5 (II stopień), 3/5 (III stopień) — wszystkie z dzieloną pulą",
     jackpotOdds: Math.round(1 / p5),
   };
@@ -6540,6 +6548,7 @@ function renderEvDetail(key) {
         <div class="stat"><div class="k">Szansa na I stopień (5+2)</div><div class="v dim">1 do ${r.jackpotOdds.toLocaleString('pl-PL')}</div></div>
       </div>
       <div class="note warn"><b>Zero gwarantowanej części.</b> Wszystkie 12 stopni dzielone między zwycięzców we wszystkich 19 krajach. Regulamin gwarantuje tylko min. ${r.minRtpPct.toFixed(0)}% RTP sumarycznie oraz minimalną pulę I stopnia 10 mln EUR (też dzieloną, jeśli więcej niż 1 zwycięzca). Pula każdego stopnia jest odgórnie ograniczona do 120 mln EUR (§19 ust.5) — przy kumulacjach powyżej tego pułapu nadwyżka przechodzi na niższe stopnie.</div>
+      ${ejTypicalPayoutsHtml()}
       ${jackpotPanelHtml('eurojackpot')}
     `;
   } else if (key === 'minilotto') {
@@ -6551,6 +6560,16 @@ function renderEvDetail(key) {
         <div class="stat"><div class="k">Szansa na I stopień (5/5)</div><div class="v dim">1 do ${r.jackpotOdds.toLocaleString('pl-PL')}</div></div>
       </div>
       <div class="note warn"><b>Zero stałej części, tylko dolny próg.</b> W odróżnieniu od Lotto (gdzie "trójka" to stała, w pełni znana kwota 24 zł), Mini Lotto nie ma żadnej całkowicie stałej wygranej — wszystkie 3 stopnie (I: 5/5, II: 4/5, III: 3/5) dzielą pulę między zwycięzców. Regulamin (§22) gwarantuje tylko, że pojedyncza wygrana nie spadnie poniżej wniesionej stawki (${MINILOTTO_STAWKA.toFixed(2)} zł) — TS dopłaca różnicę, jeśli wyliczona kwota wypadłaby niżej. Regulamin gwarantuje też min. ${r.minRtpPct.toFixed(0)}% wpłat wracających jako wygrane sumarycznie (§2). ${r.unknownTiers} — nieznane z góry, zależne od liczby zwycięzców w danym losowaniu.</div>
+      ${r.miniW ? `
+      <div class="subsection" style="margin-top:14px;">
+        <div class="subsection-title">Szacunek z realnych wypłat (API LOTTO)</div>
+        <div class="stat-grid">
+          <div class="stat"><div class="k">Szac. EV zakładu</div><div class="v brass">${r.estEv.toFixed(4)} zł</div></div>
+          <div class="stat"><div class="k">Szac. RTP</div><div class="v">${r.estRtpPct.toFixed(1)}%</div></div>
+          <div class="stat"><div class="k">Typowa wypłata 5/5</div><div class="v dim">${fmtMoneyCompact(r.miniW.p5)}</div></div>
+        </div>
+        <div class="age-note">Wypłaty 3/5 ≈ ${r.miniW.p3.toFixed(2).replace('.', ',')} zł i 4/5 ≈ ${r.miniW.p4.toFixed(2).replace('.', ',')} zł to średnia ważona dwóch scenariuszy z ${r.miniW.n} ostatnich losowań: gdy padła 5/5 (w ${(r.miniW.wPadla * 100).toFixed(0)}% losowań z okna) wypłaty są niższe; gdy nie padła, pula I stopnia rozlewa się na stopnie II i III i wypłaty rosną ok. 2×. Typowa 5/5 = mediana wypłaty na zwycięzcę (przy kilku zwycięzcach pula jest dzielona). Dane z oficjalnego API LOTTO, aktualizowane automatycznie — stan na ${r.miniW.stanNa}. Szacunek, nie gwarancja — wypłata zależy od puli i liczby zwycięzców w losowaniu.</div>
+      </div>` : ''}
     `;
   } else if (key === 'ekstrapensja' || key === 'ekstrapremia' || key === 'ekstrapensjacombined') {
     const fns2 = { ekstrapensja: ekstraPensjaEv, ekstrapremia: ekstraPremiaEv, ekstrapensjacombined: ekstraPensjaCombinedEv };
@@ -7748,6 +7767,10 @@ const EUROJACKPOT_STAWKA = 10.0;
 // na zakład = (suma % poza I stopniem i Boosterem) × (50% stawki), niezależnie
 // od sprzedaży: 0.55 × 5 zł = 2,75 zł.
 const EJ_LOWER_TIERS_PCT = 0.55;
+// v4.13.0: przy realnych danych V-XII z API stopnie II-IV liczymy dalej modelem
+// proporcjonalnym (8,60% + 4,85% + 0,80% puli wg §19) — trafiają zbyt rzadko,
+// by estymować je z okna 30 losowań.
+const EJ_TIERS_2_4_PCT = 0.1425;
 
 function loadJackpotState(key) {
   try { return JSON.parse(localStorage.getItem('lotto-calc-jk-' + key)) || {}; } catch (e) { return {}; }
@@ -7797,6 +7820,52 @@ function wyplataDefault(hits) {
 function wyplataStanNa() {
   const w = (typeof WYPLATY_JSON !== 'undefined') ? WYPLATY_JSON : null;
   return (w && w.stanNa) ? w.stanNa : null;
+}
+
+// v4.13.0: realne wypłaty Mini Lotto (mediany warunkowe z WYPLATY_MINI_JSON).
+// Wartość domyślna 3/5 i 4/5 = średnia ważona dwóch scenariuszy: gdy padła 5/5
+// (pula I stopnia idzie do zwycięzcy — niższe wypłaty) i gdy nie padła (pula
+// rozlewa się na stopnie II i III — wypłaty ok. 2x wyższe), z wagami z okna.
+function miniWyplaty() {
+  const w = (typeof WYPLATY_MINI_JSON !== 'undefined') ? WYPLATY_MINI_JSON : null;
+  if (!w || !(w.p3p > 0) || !(w.p4p > 0)) return null;
+  const wPadla = (typeof w.w === 'number' && w.w > 0 && w.w < 1) ? w.w : 0.75;
+  const p3b = (w.p3b > 0) ? w.p3b : w.p3p;  // fallback: okno bez losowań „bez piątki"
+  const p4b = (w.p4b > 0) ? w.p4b : w.p4p;
+  return {
+    p3: wPadla * w.p3p + (1 - wPadla) * p3b,
+    p4: wPadla * w.p4p + (1 - wPadla) * p4b,
+    p5: (w.p5 > 0) ? w.p5 : 300000,
+    wPadla, n: w.n || 0, stanNa: w.stanNa || null
+  };
+}
+
+// v4.13.0: średnie (a{t}) i mediany (m{t}) faktycznych wypłat EJ V-XII (WYPLATY_EJ_JSON).
+function ejWyplaty() {
+  const w = (typeof WYPLATY_EJ_JSON !== 'undefined') ? WYPLATY_EJ_JSON : null;
+  if (!w || !(w.a12 > 0)) return null;
+  return w;
+}
+
+// v4.13.0: mapowanie stopień EJ -> trafienia [główne, euro] i PMF per stopień
+// (hipergeometryczne 5 z 50 x niezależne losowanie 2 z 12).
+const EJ_TIER_HITS = { 5: [4, 1], 6: [3, 2], 7: [4, 0], 8: [2, 2], 9: [3, 1], 10: [3, 0], 11: [1, 2], 12: [2, 1] };
+const EJ_TIER_LABELS = { 5: 'V (4+1)', 6: 'VI (3+2)', 7: 'VII (4+0)', 8: 'VIII (2+2)', 9: 'IX (3+1)', 10: 'X (3+0)', 11: 'XI (1+2)', 12: 'XII (2+1)' };
+function ejEuroPmf(e) {
+  return comb(EUROJACKPOT_EURO_DRAW, e) * comb(EUROJACKPOT_EURO_POOL - EUROJACKPOT_EURO_DRAW, EUROJACKPOT_EURO_DRAW - e) / comb(EUROJACKPOT_EURO_POOL, EUROJACKPOT_EURO_DRAW);
+}
+function ejTierPmf(t) {
+  const h = EJ_TIER_HITS[t];
+  return hypergeometricPmf(EUROJACKPOT_MAIN_POOL, EUROJACKPOT_MAIN_DRAW, EUROJACKPOT_MAIN_DRAW, h[0]) * ejEuroPmf(h[1]);
+}
+
+// v4.13.0: „typowe wypłaty" EJ — mediany z okna, sekcja informacyjna w EV.
+function ejTypicalPayoutsHtml() {
+  const w = ejWyplaty();
+  if (!w) return '';
+  const parts = [12, 11, 10, 9, 8, 7, 6, 5].map(t =>
+    `${EJ_TIER_LABELS[t]} ≈ ${(w['m' + t] !== null && w['m' + t] !== undefined) ? w['m' + t].toFixed(2).replace('.', ',') + ' zł' : '—'}`);
+  return `<div class="age-note" style="margin-top:8px;">Typowe wypłaty niższych stopni (mediana z ${w.n || 30} ostatnich losowań, oficjalne API LOTTO, stan na ${w.stanNa || '—'}): ${parts.join(' · ')}. Stopnie II–IV trafiają zbyt rzadko, by podać wiarygodną medianę.</div>`;
 }
 
 function jackpotPanelHtml(key) {
@@ -7884,7 +7953,7 @@ function computeJackpot(key) {
   const tax = document.getElementById('jkTax').checked;
   const taxMult = tax ? 0.9 : 1; // wygrane I stopnia zawsze > 2280 zł
 
-  let rows, evTotal, cost, fixedPart, pJackpot, share, expWinners, breakeven, breakevenNote;
+  let rows, evTotal, cost, fixedPart, pJackpot, share, expWinners, breakeven, breakevenNote, lowerModelNote = '';
 
   if (isLotto) {
     const p3 = lottoHitPmf(3), p4 = lottoHitPmf(4), p5 = lottoHitPmf(5), p6 = lottoHitPmf(6);
@@ -7915,7 +7984,19 @@ function computeJackpot(key) {
     pJackpot = 1 / eurojackpotJackpotOdds();
     share = expectedShareFraction(sales, pJackpot);
     expWinners = sales * pJackpot;
-    const evLower = EJ_LOWER_TIERS_PCT * (EUROJACKPOT_STAWKA * 0.5);
+    // v4.13.0: przy wbudowanych danych API stopnie V-XII liczone ze średnich
+    // faktycznych wypłat (suma wypłat / suma zwycięzców z 30 ostatnich losowań);
+    // II-IV pozostają w modelu proporcjonalnym §19 (za rzadkie do estymacji z okna).
+    const ejw = ejWyplaty();
+    let evLower;
+    if (ejw) {
+      evLower = EJ_TIERS_2_4_PCT * (EUROJACKPOT_STAWKA * 0.5);
+      for (const t of [5, 6, 7, 8, 9, 10, 11, 12]) evLower += ejTierPmf(t) * (ejw['a' + t] || 0);
+      lowerModelNote = `Niższe stopnie: V–XII liczone ze średnich faktycznych wypłat z ${ejw.n || 30} ostatnich losowań (oficjalne API LOTTO, stan na ${ejw.stanNa || '—'}); II–IV modelem proporcjonalnym z regulaminowego podziału §19. `;
+    } else {
+      evLower = EJ_LOWER_TIERS_PCT * (EUROJACKPOT_STAWKA * 0.5);
+      lowerModelNote = 'Niższe stopnie (II–XII) liczone modelem proporcjonalnym z regulaminowego podziału §19; ';
+    }
     const evI = pJackpot * pool * share * taxMult;
     fixedPart = evLower;
     evTotal = evLower + evI;
@@ -7925,7 +8006,7 @@ function computeJackpot(key) {
       ? 'EV przekracza koszt zakładu już bez kumulacji.'
       : `EV = koszt zakładu przy kumulacji ≈ <b>${fmtMoneyCompact(breakeven)}</b> — powyżej pułapu 120 mln €, czyli w praktyce nieosiągalne.`;
     rows = [
-      ['II–XII stopnie (model proporcjonalny §19)', 0.2, EUROJACKPOT_STAWKA * 0.5, evLower],
+      [ejw ? 'II–XII stopnie (V–XII z realnych wypłat API)' : 'II–XII stopnie (model proporcjonalny §19)', 0.2, EUROJACKPOT_STAWKA * 0.5, evLower],
       [`I stopień (kumulacja ${fmtMoneyCompact(pool)}, udział ${(share * 100).toFixed(2)}%)`, pJackpot, pool * share * taxMult, evI],
     ];
   }
@@ -7942,7 +8023,7 @@ function computeJackpot(key) {
       <div class="stat"><div class="k">Mój oczekiwany udział w puli</div><div class="v dim">${(share * 100).toFixed(1)}%</div></div>
     </div>
     <div class="resp-table" style="margin-top:10px;"><table><thead><tr><th>Składnik EV</th><th class="num">Szansa</th><th class="num">Wygrana (ocz.)</th><th class="num">Wkład w EV</th></tr></thead><tbody>${tableRows}</tbody></table></div>
-    <div class="note" style="margin-top:10px;">${breakevenNote} ${isLotto ? '' : 'Niższe stopnie (II–XII) liczone modelem proporcjonalnym z regulaminowego podziału §19; reguła uśredniania wygranych sąsiednich stopni i nadwyżka kursowa PLN/EUR pominięte jako drugorzędne. Podatek dla EJ zastosowano tylko do I stopnia — wpływ na II–III stopnie jest pomijalny. '}Szansa na trafienie zestawu jest taka sama dla każdych liczb, ale <b>mniej popularny zestaw = mniej osób do dzielenia puli</b> — zobacz zakładkę Popularność.</div>
+    <div class="note" style="margin-top:10px;">${breakevenNote} ${isLotto ? '' : lowerModelNote + 'Reguła uśredniania wygranych sąsiednich stopni i nadwyżka kursowa PLN/EUR pominięte jako drugorzędne. Podatek dla EJ zastosowano tylko do I stopnia — wpływ na II–III stopnie jest pomijalny. '}Szansa na trafienie zestawu jest taka sama dla każdych liczb, ale <b>mniej popularny zestaw = mniej osób do dzielenia puli</b> — zobacz zakładkę Popularność.</div>
     <canvas class="ev-curve" id="jkCurve"></canvas>
     <div class="age-note" style="margin-top:6px;"><b>Jak czytać wykres:</b> oś pozioma = pula I stopnia, oś pionowa = EV zakładu (zł). Mosiężna krzywa rośnie z kumulacją; przerywana linia = koszt zakładu (${cost.toFixed(2)} zł). Ich przecięcie to próg rentowności ≈ ${fmtMoneyCompact(breakeven)}. Zielona kropka = aktualna kumulacja.</div>`;
 
@@ -8176,6 +8257,11 @@ const KUMULACJE_JSON = {"lotto":{"value":3000000,"date":"06.08.2026"},"eurojackp
 // v4.12.0: mediany faktycznych wypłat 4/6 i 5/6 Lotto z 30 ostatnich losowań
 // (oficjalne API LOTTO) — linia nadpisywana automatycznie przez tools/update_draws.py.
 const WYPLATY_JSON = {"t4":163.75,"t5":5874.5,"n":30,"stanNa":"04.08.2026"};
+// v4.13.0: mediany warunkowe wypłat Mini Lotto (osobno „padła/nie padła 5/5" + waga w)
+// oraz średnie (a) i mediany (m) wypłat EuroJackpot V-XII z 30 ostatnich losowań
+// (oficjalne API LOTTO) — linie nadpisywane automatycznie przez tools/update_draws.py.
+const WYPLATY_MINI_JSON = {"p3p":31.65,"p3b":63.75,"p4p":756.35,"p4b":1629.0,"w":0.8,"p5":395582.2,"n":30,"stanNa":"04.08.2026"};
+const WYPLATY_EJ_JSON = {"a5":4471.48,"m5":1497.85,"a6":694.11,"m6":739.4,"a7":487.56,"m7":534.2,"a8":110.42,"m8":113.3,"a9":87.64,"m9":89.65,"a10":74.32,"m10":77.35,"a11":54.84,"m11":56.1,"a12":43.12,"m12":44.4,"n":30,"stanNa":"04.08.2026"};
 
 async function loadHistData() {
   const binStr = atob(HIST_DATA_B64);

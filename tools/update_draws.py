@@ -10,6 +10,8 @@ Przepływ danych (jeden kierunek, CSV = źródło prawdy):
                     ──→ wbudowanie kumulacji w index.html (const KUMULACJE_JSON,
                         czytany przez zakładkę EV kalkulatora; v4.11.0)
                 ──→ dopiski do data/wyplaty_lotto.csv (faktyczne wypłaty per stopień)
+                ──→ dopiski do data/wyplaty_minilotto.csv i data/wyplaty_eurojackpot.csv
+                    (v4.13.0 — mediany warunkowe Mini Lotto, średnie/mediany EJ V-XII)
                     ──→ wbudowanie median z 30 losowań w index.html
                         (const WYPLATY_JSON; v4.12.0)
 
@@ -103,6 +105,20 @@ WYPLATY_PATH = os.path.join(DATA_DIR, 'wyplaty_lotto.csv')
 WYPLATY_RE = re.compile(r'^const WYPLATY_JSON = \{[^\n]+\};$', re.M)
 WYPLATY_BACKFILL = 60   # losowań wstecz przy pierwszym uruchomieniu
 WYPLATY_MEDIAN_N = 30   # okno mediany dla agregatu wbudowywanego w index.html
+
+# ---------- wypłaty Mini Lotto i EuroJackpot (v4.13.0) ----------
+# Mini Lotto: numeracja API == numeracja bazy (gra w ALIGNED_ID_GAMES).
+# EuroJackpot: API ma własną numerację (drawSystemId 692 przy bazie 0978) —
+# w wyplaty_eurojackpot.csv kolumna nr przechowuje ID z API (potrzebne do
+# inkrementalnego pobierania z draw-prizes), data pozwala zmapować na bazę.
+WYPLATY_MINI_PATH = os.path.join(DATA_DIR, 'wyplaty_minilotto.csv')
+WYPLATY_EJ_PATH = os.path.join(DATA_DIR, 'wyplaty_eurojackpot.csv')
+WYPLATY_MINI_RE = re.compile(r'^const WYPLATY_MINI_JSON = \{[^\n]+\};$', re.M)
+WYPLATY_EJ_RE = re.compile(r'^const WYPLATY_EJ_JSON = \{[^\n]+\};$', re.M)
+WYPLATY_EJ_BACKFILL = 40  # EJ: 2 losowania/tydz. — 40 ~= 20 tygodni
+MINI_DEG_KEYS = ('1', '2', '3')              # 1=5/5, 2=4/5, 3=3/5
+EJ_DEG_KEYS = tuple(str(i) for i in range(1, 13))   # stopnie I-XII
+EJ_EMBED_DEGS = range(5, 13)                 # do embeda: V-XII (I-IV zbyt rzadkie/zmienne)
 LOTTO_DEG_TO_HITS = {'1': 6, '2': 5, '3': 4, '4': 3}  # stopień API -> trafienia
 
 
@@ -392,6 +408,139 @@ def embed_wyplaty():
     return True
 
 
+# ---------- wypłaty Mini Lotto / EuroJackpot (v4.13.0) ----------
+
+def fetch_game_prize_rows(draw_type, draw_id, deg_keys, api_key):
+    """Wiersze CSV wypłat dowolnej gry z draw-prizes (format jak wyplaty_lotto.csv:
+    nr,data,stopien,count,kwota). None = wypłaty jeszcze nieopublikowane."""
+    items = api_get(f'lotteries/draw-prizes/{draw_type}/{draw_id}', {}, api_key, fatal=False)
+    if not items:
+        return None
+    game = [i for i in items if i.get('gameType') == draw_type]
+    if len(game) != 1 or game[0].get('prizesEmpty'):
+        return None
+    it = game[0]
+    dt = datetime.fromisoformat(it['drawDate'].replace('Z', '+00:00')).astimezone(WARSAW)
+    date_pl = dt.strftime('%d.%m.%Y')
+    rows = []
+    for deg in deg_keys:
+        p = it['prizes'].get(deg)
+        if p is None:
+            return None
+        rows.append(f'{draw_id},{date_pl},{deg},{p["prize"]},{p["prizeValue"]:.2f}')
+    return rows
+
+
+def update_wyplaty_game(path, draw_type, deg_keys, last_api_id, backfill, api_key):
+    """Generyczny odpowiednik update_wyplaty: append-only po numerze losowania.
+    Zwraca True przy dopisku."""
+    existing = []
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            existing = [l.rstrip('\n') for l in f if l.strip()]
+    last_done = int(existing[-1].split(',')[0]) if existing else last_api_id - backfill
+    new_rows = []
+    nr = last_done + 1
+    while nr <= last_api_id:
+        rows = fetch_game_prize_rows(draw_type, nr, deg_keys, api_key)
+        if rows is None:
+            log(f'  wypłaty {draw_type}: nr {nr} jeszcze nieopublikowane — dokończę później')
+            break
+        new_rows.extend(rows)
+        time.sleep(REQUEST_PAUSE_S)
+        nr += 1
+    if not new_rows:
+        return False
+    with open(path, 'a', encoding='utf-8', newline='') as f:
+        f.write('\n'.join(new_rows) + '\n')
+    log(f'{os.path.basename(path)}: +{len(new_rows)} wierszy (do nr {new_rows[-1].split(",")[0]})')
+    return True
+
+
+def _embed_const(const_name, regex, data):
+    """Podmienia zakotwiczoną linię const w index.html. True = zmieniono."""
+    const_line = f'const {const_name} = ' + json.dumps(
+        data, ensure_ascii=False, separators=(',', ':')) + ';'
+    src = open(INDEX_PATH, encoding='utf-8').read()
+    new_src, n = regex.subn(lambda _: const_line, src, count=1)
+    if n != 1:
+        fail(f'nie znaleziono zakotwiczonej linii {const_name} w index.html')
+    if new_src == src:
+        return False
+    open(INDEX_PATH, 'w', encoding='utf-8').write(new_src)
+    return True
+
+
+def embed_wyplaty_mini():
+    """Mediany warunkowe wypłat Mini Lotto z WYPLATY_MEDIAN_N ostatnich losowań:
+    osobno dla losowań, w których padła 5/5 (pula I stopnia do zwycięzcy) i w
+    których nie padła (pula rozlewa się na stopnie II i III — wypłaty ~2x wyższe).
+    Kalkulator liczy wartość domyślną jako średnią ważoną obu scenariuszy (w).
+    -> const WYPLATY_MINI_JSON w index.html (stała kolejność kluczy)."""
+    by_nr = {}
+    with open(WYPLATY_MINI_PATH, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            nr, date, deg, cnt, kwota = line.split(',')
+            by_nr.setdefault(int(nr), {'date': date})[deg] = (int(cnt), float(kwota))
+    last_nrs = sorted(by_nr)[-WYPLATY_MEDIAN_N:]
+    # Klucze CSV = surowe stopnie API: '1' = 5/5, '2' = 4/5, '3' = 3/5.
+    padla = [n for n in last_nrs if by_nr[n]['1'][0] > 0]
+    bez = [n for n in last_nrs if by_nr[n]['1'][0] == 0]
+    def med(deg, nrs):
+        vals = [by_nr[n][deg][1] for n in nrs]
+        return round(statistics.median(vals), 2) if vals else None
+    p5_vals = [by_nr[n]['1'][1] for n in padla]
+    data = {
+        'p3p': med('3', padla), 'p3b': med('3', bez),
+        'p4p': med('2', padla), 'p4b': med('2', bez),
+        'w': round(len(padla) / len(last_nrs), 3),
+        'p5': round(statistics.median(p5_vals), 2) if p5_vals else None,
+        'n': len(last_nrs), 'stanNa': by_nr[last_nrs[-1]]['date'],
+    }
+    return _embed_const('WYPLATY_MINI_JSON', WYPLATY_MINI_RE, data)
+
+
+def embed_wyplaty_ej():
+    """Stopnie V-XII EuroJackpot z WYPLATY_MEDIAN_N ostatnich losowań:
+    a{t} = średnia wypłata na zwycięzcę (suma wypłat / suma zwycięzców — właściwa
+    statystyka do EV), m{t} = mediana (wartość „typowa" do pokazania użytkownikowi).
+    Stopnie I-IV pomijane — za mało trafień w oknie / ekstremalna wariancja.
+    -> const WYPLATY_EJ_JSON w index.html (stała kolejność kluczy)."""
+    by_nr = {}
+    with open(WYPLATY_EJ_PATH, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            nr, date, deg, cnt, kwota = line.split(',')
+            by_nr.setdefault(int(nr), {'date': date})[deg] = (int(cnt), float(kwota))
+    last_nrs = sorted(by_nr)[-WYPLATY_MEDIAN_N:]
+    data = {}
+    for deg in EJ_EMBED_DEGS:
+        cnt_sum = sum(by_nr[n][str(deg)][0] for n in last_nrs)
+        paid_sum = sum(by_nr[n][str(deg)][0] * by_nr[n][str(deg)][1] for n in last_nrs)
+        med_vals = [by_nr[n][str(deg)][1] for n in last_nrs if by_nr[n][str(deg)][0] > 0]
+        data[f'a{deg}'] = round(paid_sum / cnt_sum, 2) if cnt_sum else None
+        data[f'm{deg}'] = round(statistics.median(med_vals), 2) if med_vals else None
+    data['n'] = len(last_nrs)
+    data['stanNa'] = by_nr[last_nrs[-1]]['date']
+    return _embed_const('WYPLATY_EJ_JSON', WYPLATY_EJ_RE, data)
+
+
+def fetch_ej_last_api_id(api_key):
+    """Ostatni drawSystemId EuroJackpot w API (osobna numeracja niż baza).
+    Soft-fail: None przy błędzie — wypłaty EJ dokończymy przy następnym runie."""
+    items = api_get('lotteries/draw-results/last-results-per-game',
+                    {'gameType': 'EuroJackpot'}, api_key, fatal=False)
+    if not items:
+        return None
+    sid = items[0].get('drawSystemId')
+    return sid if isinstance(sid, int) else None
+
+
 # ---------- przebieg główny ----------
 
 def main():
@@ -490,11 +639,31 @@ def main():
     if wyplaty_embedded:
         log('index.html: wbudowano zaktualizowane mediany wypłat (WYPLATY_JSON)')
 
+    # Wypłaty Mini Lotto i EuroJackpot (v4.13.0, soft-fail jak wyżej)
+    mini_changed = update_wyplaty_game(WYPLATY_MINI_PATH, 'MiniLotto', MINI_DEG_KEYS,
+                                       last_nr['mini_lotto'], WYPLATY_BACKFILL, api_key)
+    mini_embedded = embed_wyplaty_mini() if os.path.exists(WYPLATY_MINI_PATH) else False
+    if mini_embedded:
+        log('index.html: wbudowano mediany warunkowe wypłat Mini Lotto (WYPLATY_MINI_JSON)')
+    ej_last_api = fetch_ej_last_api_id(api_key)
+    ej_changed = False
+    ej_embedded = False
+    if ej_last_api:
+        ej_changed = update_wyplaty_game(WYPLATY_EJ_PATH, 'EuroJackpot', EJ_DEG_KEYS,
+                                         ej_last_api, WYPLATY_EJ_BACKFILL, api_key)
+        ej_embedded = embed_wyplaty_ej() if os.path.exists(WYPLATY_EJ_PATH) else False
+        if ej_embedded:
+            log('index.html: wbudowano średnie/mediany wypłat EuroJackpot (WYPLATY_EJ_JSON)')
+    else:
+        log('  wypłaty EuroJackpot: nie udało się pobrać ostatniego ID — pomijam')
+
     # Przebudowa bloba z CSV (zawsze z aktualnych plików)
     blob_changed = rebuild_blob() if total_added > 0 else False
 
     if (total_added == 0 and not jackpots_changed and not jk_embedded
-            and not wyplaty_changed and not wyplaty_embedded):
+            and not wyplaty_changed and not wyplaty_embedded
+            and not mini_changed and not mini_embedded
+            and not ej_changed and not ej_embedded):
         log('Brak nowych danych — repo bez zmian.')
         write_github_output('false', '')
         return
@@ -511,7 +680,7 @@ def main():
             summary = 'data: kumulacje ' + ', '.join(l.split(',')[0] + ' ' + l.split(',')[1]
                                                      for l in jk.strip().split('\n'))
         else:
-            summary = 'data: wypłaty lotto (mediana 30 losowań)'
+            summary = 'data: wypłaty (mediany/średnie z 30 losowań)'
         log(summary)
     write_github_output('true', summary)
 
