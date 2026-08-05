@@ -66,6 +66,11 @@ i dopisuje nowe losowania. Pliki w repo:
 - `data/kumulacje.csv` — aktualne kumulacje Lotto i Eurojackpot
 - `data/wyplaty_lotto.csv` — faktyczne wypłaty per stopień dla Lotto
   (źródło domyślnych estymacji 4/6 i 5/6 w zakładce EV)
+- `data/wyplaty_minilotto.csv` — faktyczne wypłaty Mini Lotto
+  (mediany warunkowe „padła/nie padła 5/5" — szacunek EV w zakładce EV)
+- `data/wyplaty_eurojackpot.csv` — faktyczne wypłaty Eurojackpot
+  (średnie i mediany stopni V–XII — szacunek EV niższych stopni;
+  kolumna nr to identyfikator losowania z API, nie numer z bazy wyników)
 
 ## Dane i prywatność
 
