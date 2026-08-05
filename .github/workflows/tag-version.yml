@@ -8,6 +8,7 @@ on:
   push:
     branches: [main]
     paths: [index.html]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,7 +22,8 @@ jobs:
           fetch-depth: 0
       - name: Utwórz tag z version-tag w index.html
         run: |
-          V=$(grep -m1 'version-tag' index.html | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          # Szukamy numeru w HTML-owym divie (version-tag">vX.Y.Z), nie w regułach CSS.
+          V=$(grep -m1 -oE 'version-tag">v[0-9]+\.[0-9]+\.[0-9]+' index.html | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+')
           if [ -z "$V" ]; then echo "nie znaleziono numeru wersji"; exit 1; fi
           if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
             echo "tag $V już istnieje — pomijam"
