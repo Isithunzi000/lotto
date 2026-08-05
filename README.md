@@ -77,15 +77,22 @@ i dopisuje nowe losowania. Pliki w repo:
 
 Dodatkowo repo zawiera `tools/calibrate_popularity.py` — skrypt kalibracji
 empirycznej wag modelu popularności zestawów (regresja log-ilorazowa WLS
-na liczbach zwycięzców z API; train/test 80/20). Kalibracja nie jest
-uruchamiana w Actions — zmienia stałe modelu i wymaga ręcznego przeglądu.
+na liczbach zwycięzców z API; train/test 80/20). Re-kalibracja jest
+automatyczna: workflow `recalibrate.yml` co miesiąc sprawdza, czy od
+ostatniej kalibracji minęło 6 miesięcy (bramka liczy od faktycznego
+ostatniego commita kalibracji, nie od kalendarza), i jeśli tak — przelicza
+wagi na świeżych danych. Wynik publikowany jest (commit + wersja patch +
+tag + release) dopiero po dowodzie determinizmu (podwójny przebieg,
+porównanie bajtowe) i przejściu strażników `tools/guard_calibration.py`
+(G1-G7: schema, spadek danych, granice wag, moc predykcyjna, limit zmiany,
+monotoniczność i świeżość dat; porażka = czerwony job + issue, bez
+publikacji). Ręczny przebieg: `python3 tools/calibrate_popularity.py
+[--game lotto|mini|all]` (domyślnie obie gry; `--dry-run` bez zapisu).
 Wynik jest wbudowywany w `index.html` jako `POPULARNOSC_KALIBR_JSON`
 (Lotto / Lotto Plus, pula 49) i `POPULARNOSC_KALIBR_MINI_JSON` (Mini Lotto,
 pula 42); pozostałe gry używają dotychczasowej heurystyki, bo albo mają
 wygrane stałe (popularność nie wpływa na wypłatę), albo dzielą pulę
 w skali międzynarodowej przy danych tylko polskich (EuroJackpot).
-Uruchomienie: `python3 tools/calibrate_popularity.py [--game lotto|mini|all]`
-(domyślnie obie gry; `--dry-run` bez zapisu).
 
 ## Dane i prywatność
 

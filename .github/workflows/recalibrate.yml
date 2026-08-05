@@ -1,0 +1,176 @@
+name: Auto-rekalibracja wag popularności
+
+# Co miesiąc (2. dnia, 06:00 UTC) bramka „due" sprawdza, czy od ostatniej
+# kalibracji minęło ≥6 miesięcy (183 dni) — liczone od faktycznego ostatniego
+# commita zmieniającego zakotwiczone const POPULARNOSC_KALIBR*, nie od
+# kalendarza. Dzięki temu pominięty przebieg łapie się miesiąc później,
+# a ręczna kalibracja sama przesuwa cykl.
+#
+# Kalibracja zmienia stałe modelu — publikacja (commit + wersja patch +
+# tag + release) wyłącznie po przejściu strażników G1-G7
+# (tools/guard_calibration.py) i dowodzie determinizmu (podwójny przebieg,
+# porównanie bajtowe). Porażka = czerwony job + issue, BEZ commitu.
+#
+# Job nie używa żadnych sekretów (kalibracja liczy na CSV z repo).
+# Uwaga: push tokenem GITHUB_TOKEN nie odpala workflow taga, więc tag +
+# release wywoływane są jawnym dispatchem tag-version.yml.
+
+on:
+  schedule:
+    - cron: '0 6 2 * *'   # 2. dnia każdego miesiąca, 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Pomiń bramkę 6 miesięcy'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Tylko pokaż wynik kalibracji (bez zapisu, strażników i publikacji)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # commit + push
+  issues: write     # issue przy porażce strażników
+  actions: write    # dispatch tag-version.yml
+
+concurrency:
+  group: recalibrate
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  recalibrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # bramka due czyta historię git
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'   # pinned — reprodukowalność floatów
+
+      - name: Bramka „due" (≥183 dni od ostatniej kalibracji)
+        id: gate
+        if: ${{ inputs.force != true }}
+        run: |
+          LAST=$(git log -1 --format=%ct -G '^const POPULARNOSC_KALIBR' -- index.html || true)
+          if [ -z "$LAST" ]; then
+            echo "brak historii kalibracji w git — traktuję jako due"
+            echo "due=true" >> "$GITHUB_OUTPUT"
+          else
+            DAYS=$(( ($(date +%s) - LAST) / 86400 ))
+            echo "ostatnia kalibracja: $DAYS dni temu (próg: 183)"
+            if [ "$DAYS" -ge 183 ]; then
+              echo "due=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "due=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Niedue — bez działań
+        if: ${{ inputs.force != true && steps.gate.outputs.due == 'false' }}
+        run: echo "Od ostatniej kalibracji < 183 dni — pomijam."
+
+      - name: Kalibracja (dry-run, bez zapisu)
+        if: ${{ inputs.dry_run == true && (inputs.force == true || steps.gate.outputs.due == 'true') }}
+        run: python3 tools/calibrate_popularity.py --dry-run
+
+      - name: Kalibracja (przebieg 1)
+        id: cal1
+        if: ${{ inputs.dry_run != true && (inputs.force == true || steps.gate.outputs.due == 'true') }}
+        run: |
+          python3 tools/calibrate_popularity.py
+          if git diff --quiet -- index.html; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Wynik identyczny z wbudowanym — bez zmian (idempotencja)."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dowód determinizmu (przebieg 2, porównanie bajtowe)
+        if: ${{ steps.cal1.outputs.changed == 'true' }}
+        run: |
+          cp index.html /tmp/run1.html
+          git checkout -- index.html
+          python3 tools/calibrate_popularity.py
+          if ! cmp -s /tmp/run1.html index.html; then
+            echo "BŁĄD: dwa przebiegi na identycznym wejściu dały różny wynik — kalibracja niedeterministyczna"
+            exit 1
+          fi
+          echo "determinizm potwierdzony (bajt w bajt)"
+
+      - name: Strażnicy G1-G7
+        id: guards
+        if: ${{ steps.cal1.outputs.changed == 'true' }}
+        run: |
+          if python3 tools/guard_calibration.py; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Porażka strażników — reset pliku + issue, bez publikacji
+        if: ${{ steps.guards.outputs.ok == 'false' }}
+        run: |
+          git checkout -- index.html
+          TITLE="Auto-rekalibracja: strażnicy odrzucili wynik ($(date +%Y-%m-%d))"
+          if ! gh issue list --state open --search "$TITLE in:title" --json number | grep -q '"number"'; then
+            gh issue create --title "$TITLE" --body "Strażnicy G1-G7 odrzucili wynik auto-rekalibracji — plik przywrócony, nic nie opublikowano. Log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          fi
+          exit 1
+
+      - name: Bump wersji patch + commit + push
+        id: pub
+        if: ${{ steps.guards.outputs.ok == 'true' }}
+        run: |
+          python3 - <<'EOF'
+          import re
+          from datetime import datetime, timezone
+          src = open('index.html', encoding='utf-8').read()
+          m = re.search(r'<div class="version-tag">v(\d+)\.(\d+)\.(\d+) \| \d{2}-\d{2}-\d{4}</div>', src)
+          assert m, 'version-tag nie znaleziony'
+          new_v = f'v{m.group(1)}.{m.group(2)}.{int(m.group(3)) + 1}'
+          today = datetime.now(timezone.utc).strftime('%d-%m-%Y')
+          new_tag = f'<div class="version-tag">{new_v} | {today}</div>'
+          assert src.count(m.group(0)) == 1, 'version-tag nieunikalny'
+          open('index.html', 'w', encoding='utf-8').write(src.replace(m.group(0), new_tag))
+          print(f'bump: {new_v} | {today}')
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          V=$(grep -m1 -oE 'version-tag">v[0-9]+\.[0-9]+\.[0-9]+' index.html | grep -oE 'v[0-9.]+')
+          STAN=$(python3 -c "
+          import json, re
+          src = open('index.html', encoding='utf-8').read()
+          out = []
+          for name in ('POPULARNOSC_KALIBR_JSON', 'POPULARNOSC_KALIBR_MINI_JSON'):
+              d = json.loads(re.search(rf'^const {name} = (\{{[^\n]+\}});\$', src, re.M).group(1))
+              out.append(d['stanNa'])
+          print('/'.join(out))")
+          git add index.html
+          git commit -m "$V: auto-kalibracja wag popularności (stan na $STAN, strażnicy G1-G7 OK)"
+          git pull --rebase
+          git push
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Tag + release (dispatch tag-version.yml)
+        if: ${{ steps.pub.outputs.version != '' }}
+        run: gh workflow run tag-version.yml
+
+      - name: Weryfikacja taga i release (do 3 min)
+        if: ${{ steps.pub.outputs.version != '' }}
+        run: |
+          V="${{ steps.pub.outputs.version }}"
+          for i in $(seq 1 18); do
+            sleep 10
+            if gh release view "$V" >/dev/null 2>&1; then
+              echo "tag + release $V potwierdzone"
+              exit 0
+            fi
+          done
+          echo "BŁĄD: brak release $V po dispatch tag-version.yml"
+          exit 1
