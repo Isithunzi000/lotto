@@ -23,7 +23,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write   # commit + push danych
+  issues: write     # issue przy porażce sekcji opcjonalnych
 
 # HARDENING: jeden run naraz. Opóźniony cron (GitHub bywa spóźniony o 1-2 h)
 # może się złożyć z kolejnym — bez tej grupy dwa runy ścigały się o push
@@ -39,9 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15   # zdrowy run trwa <1 min; 15 min = dead-man switch
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -102,3 +103,22 @@ jobs:
       - name: Brak nowych danych
         if: steps.fetch.outputs.changed == 'false'
         run: echo "Wszystko aktualne — bez commitu."
+
+      # Sekcje opcjonalne (wypłaty/mediany/sprzedaż) nie blokują sondy — skrypt
+      # kończy się zielono, ale zgłasza optfail=true. Tutaj zamieniamy to na
+      # issue (jedno otwarte naraz; kolejne występy lądują jako komentarze),
+      # żeby sygnał nie ginął w logach.
+      - name: Zgłoś błędy sekcji opcjonalnych (issue)
+        if: steps.fetch.outputs.optfail == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SECTIONS: ${{ steps.fetch.outputs.optfail_sections }}
+        run: |
+          SEARCH="Sonda: błąd sekcji opcjonalnej in:title"
+          NUM=$(gh issue list --state open --search "$SEARCH" --json number --jq '.[0].number')
+          BODY="Sekcje: $SECTIONS — dane główne (losowania, kumulacje, blob) zapisały się poprawnie, to NIE blokuje sondy. Log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -z "$NUM" ]; then
+            gh issue create --title "Sonda: błąd sekcji opcjonalnej ($(date +%Y-%m-%d))" --body "$BODY"
+          else
+            gh issue comment "$NUM" --body "Kolejny przypadek $(date +%Y-%m-%d\ %H:%M\ UTC): $BODY"
+          fi
