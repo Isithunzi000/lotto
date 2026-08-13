@@ -569,7 +569,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.15.2 | 05-08-2026</div>
+    <div class="version-tag">v4.15.3 | 13-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -8339,11 +8339,11 @@ const SPRZEDAZ_JSON = {"m":3315390,"b0":2708414,"b2":3317671,"b5":4375378,"n":60
 // v4.14.0: empirycznie skalibrowane wagi popularności Lotto (z liczb zwycięzców,
 // data/wyplaty_lotto.csv) — linia nadpisywana RĘCNIE przez tools/calibrate_popularity.py
 // (nie przez sondę — zmiana stałych modelu wymaga przeglądu).
-const POPULARNOSC_KALIBR_JSON = {"b":0.0296,"w":1.03,"r":0.0163,"wr":1.0165,"n":500,"nTest":100,"corrTrain":0.155,"corrTest":0.262,"hit6Lo":0.26,"hit6Hi":0.2,"stanNa":"04.08.2026"};
+const POPULARNOSC_KALIBR_JSON = {"b":0.0297,"w":1.0302,"r":0.0159,"wr":1.016,"n":503,"nTest":101,"corrTrain":0.152,"corrTest":0.28,"hit6Lo":0.24,"hit6Hi":0.216,"stanNa":"11.08.2026"};
 // v4.15.0: empirycznie skalibrowane wagi popularności Mini Lotto (z liczb zwycięzców,
 // data/wyplaty_minilotto.csv) — linia nadpisywana RĘCZNIE przez tools/calibrate_popularity.py
 // (nie przez sondę — zmiana stałych modelu wymaga przeglądu).
-const POPULARNOSC_KALIBR_MINI_JSON = {"b":0.0187,"w":1.0189,"r":0.0101,"wr":1.0101,"n":500,"nTest":100,"corrTrain":0.127,"corrTest":0.153,"hit5Lo":0.7,"hit5Hi":0.78,"stanNa":"04.08.2026"};
+const POPULARNOSC_KALIBR_MINI_JSON = {"b":0.019,"w":1.0191,"r":0.0111,"wr":1.0112,"n":508,"nTest":102,"corrTrain":0.134,"corrTest":0.126,"hit5Lo":0.706,"hit5Hi":0.725,"stanNa":"12.08.2026"};
 
 async function loadHistData() {
   const binStr = atob(HIST_DATA_B64);
