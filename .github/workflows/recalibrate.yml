@@ -44,6 +44,7 @@ env:
 jobs:
   recalibrate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -153,8 +154,27 @@ jobs:
           print('/'.join(out))")
           git add index.html
           git commit -m "$V: auto-kalibracja wag popularności (stan na $STAN, strażnicy G1-G7 OK)"
-          git pull --rebase
-          git push
+
+          # HARDENING: push odporny na przejściowe problemy i wyścigi z sondą:
+          # pull --rebase wyrównuje z main, pętla robi do 3 prób z rosnącą
+          # pauzą. Dopiero potrójna porażka kończy run błędem (a wynik
+          # kalibracji i tak zostanie odtworzony przy następnym due).
+          ok=""
+          for i in 1 2 3; do
+            if ! git pull --rebase origin main; then
+              git rebase --abort || true
+            fi
+            if git push; then
+              ok=1
+              break
+            fi
+            echo "::warning::push: próba $i nieudana — ponawiam za $((i * 15)) s"
+            sleep $((i * 15))
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::push nie powiódł się po 3 próbach — kalibracja odtworzy się przy następnym runie"
+            exit 1
+          fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Tag + release (dispatch tag-version.yml)
