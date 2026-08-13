@@ -14,8 +14,9 @@
 
 ## Stan w chwili ostatniej aktualizacji (13.08.2026)
 
-- **Wersja**: v4.15.2 (tag + release istnieją; zmiany 13.08 to czysto CI/skrypty — bez bumpu, zgodnie z zasadą 3)
-- **main**: `168bfa5` — dane losowań aktualne do 13.08.2026 (commit sondy `ba00bcc`)
+- **Wersja**: v4.15.3 (tag + release istnieją) — auto-kalibracja wag 13.08.2026, strażnicy G1-G7 OK
+- **main**: `923d3f8` — dane losowań aktualne do 13.08.2026
+- **Wagi po kalibracji 13.08**: Lotto w=1,0302, wr=1,016 (n=503, stan 11.08); Mini w=1,0191, wr=1,0112 (n=508, stan 12.08)
 - **Issues**: 0 otwartych
 - **CI**: pełny hardening wdrożony i zweryfikowany runami na żywo (wszystkie zielone)
 
@@ -77,5 +78,5 @@ PAT do GitHuba i klucz LOTTO_API_KEY są w **plikach projektu Kimi** (nigdy w re
 
 ## Zaległe / zaplanowane
 
-- **Test (a)** — wymuszona rekalibracja (`force`) na main. Zaplanowana była na 07.08.2026, ale NIE odpaliła (brak runów rekalibracji po 05.08) — do wykonania przy najbliższej okazji. Jeśli wagi przesuną się ≥ 0,0001 → pełna ścieżka publikacji odpali na żywo (v4.15.3); jeśli nie → kolejny dowód idempotencji (też poprawne).
+- **Test (a)** — ✅ WYKONANY 13.08.2026: wymuszona rekalibracja (`force`) przeszła pełną ścieżkę publikacji na żywo (kalibracja → dowód determinizmu → strażnicy G1-G7 → bump v4.15.3 → tag → release → Pages). Wagi przesunęły się minimalnie (model stabilny).
 - Comiesięczne ticki crona rekalibracji do ~lutego 2027 będą kończyć się statusem „niedue" — to oczekiwane.
