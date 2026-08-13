@@ -14,9 +14,19 @@ on:
 permissions:
   contents: write
 
+# HARDENING: jeden run naraz. Sonda wypycha index.html 3x dziennie,
+# a rekalibracja dodatkowo raz na pół roku — bez grupy dwa runy mogłyby
+# ścigać się o utworzenie tego samego taga (przegrywający = czerwony run).
+# cancel-in-progress: false = kolejny run czeka i robi no-op, gdy tag
+# w międzyczasie powstał.
+concurrency:
+  group: tag-version
+  cancel-in-progress: false
+
 jobs:
   tag:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,7 +46,26 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$V"
-          git push origin "$V"
+          # HARDENING: push taga z retry (przejściowe błędy sieci) i re-checkiem
+          # zdalnego taga — jak tag już jest na origin, to no-op, nie błąd.
+          ok=""
+          for i in 1 2 3; do
+            if git push origin "$V"; then
+              ok=1
+              break
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/$V" >/dev/null 2>&1; then
+              echo "tag $V już jest na origin — traktuję jako no-op"
+              ok=1
+              break
+            fi
+            echo "::warning::push taga: próba $i nieudana — ponawiam za $((i * 10)) s"
+            sleep $((i * 10))
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::push taga $V nie powiódł się po 3 próbach"
+            exit 1
+          fi
           echo "created=true" >> "$GITHUB_OUTPUT"
           echo "utworzono tag $V"
       - name: Utwórz GitHub Release z notatką z commita wersji
