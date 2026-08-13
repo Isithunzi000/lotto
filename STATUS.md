@@ -3,7 +3,7 @@
 > Punkt startowy dla nowych sesji/czatów pracujących nad projektem.
 > Aktualizowany w tym samym commicie co każda większa zmiana.
 > **Repo jest publiczne — w tym pliku NIGDY nie ma sekretów, kluczy ani danych osobowych.**
-> Ostatnia aktualizacja: **05.08.2026**
+> Ostatnia aktualizacja: **13.08.2026**
 
 ## Projekt
 
@@ -12,13 +12,12 @@
 - **Aplikacja**: jednoplikowy kalkulator lotto (`index.html`, ~1,5 MB, 100% offline). Baza losowań osadzona jako gzip+base64 w zakotwiczonej linii `const HIST_DATA_B64 = "H4sI..."`.
 - **Dokumentacja techniczna**: README.md opisuje całą automatykę.
 
-## Stan w chwili ostatniej aktualizacji (05.08.2026)
+## Stan w chwili ostatniej aktualizacji (13.08.2026)
 
-- **Wersja**: v4.15.2 (tag + release istnieją)
-- **main**: `44d7ad7` — working tree czysty, local == remote
-  _(po tym commicie mogą już być nowsze commity sondy z danymi — to normalne)_
-- **Testy**: 66 testów node zielonych + 9 scenariuszy strażników + 3 próby generalne online + pełny test fail-safe (b) — wszystko zweryfikowane
+- **Wersja**: v4.15.2 (tag + release istnieją; zmiany 13.08 to czysto CI/skrypty — bez bumpu, zgodnie z zasadą 3)
+- **main**: `168bfa5` — dane losowań aktualne do 13.08.2026 (commit sondy `ba00bcc`)
 - **Issues**: 0 otwartych
+- **CI**: pełny hardening wdrożony i zweryfikowany runami na żywo (wszystkie zielone)
 
 ## Automatyka (GitHub Actions)
 
@@ -32,6 +31,23 @@
    - sukces: auto-bump wersji + commit + push + dispatch tag-version.yml + weryfikacja release
    - porażka strażników: reset pliku, czerwony job, deduplikowany issue — nic nie publikuje
    - pierwsza realna automatyczna rekalibracja: ~luty 2027 (6 mies. po kalibracji z v4.15.0)
+
+## Hardening CI (13.08.2026)
+
+Po dwóch fałszywych alarmach „Run failed" (kolejka runnerów GitHub + wyścig o push) wszystkie trzy workflow dostały spójny zestaw zabezpieczeń:
+
+- **concurrency per workflow** (`sonda-lotto`, `tag-version`, `recalibrate`; `cancel-in-progress: false`) — runy kolejkują się zamiast ścigać o push/tag
+- **odporne pushe** — `pull --rebase` + 3 próby z rosnącą pauzą (sonda, rekalibracja, push taga)
+- **retry sondy** po 60 s przy porażce (skrypt idempotentny)
+- **guard na pusty staging** zamiast „nothing to commit" (exit 1)
+- **timeout-minutes** na każdym jobie (10–20 min)
+- **akcje v7** (`checkout`, `setup-python`) — Node 24, koniec warningów deprecacji
+
+Zmiany w `tools/update_draws.py` (13.08.2026):
+
+- **trwałe luki wypłat pomijane look-ahead** (`GAP_LOOKAHEAD = 5`): jeśli nowsze numery mają już wypłaty, a dany nr nie — luka jest pomijana z ostrzeżeniem zamiast blokować mediany na zawsze
+- **sekcje opcjonalne soft-fail**: błąd wypłat/median/sprzedaży (także `fail()`) nie przerywa sondy — dane główne (losowania, kumulacje, blob) zapisują się zawsze; jądro nadal hard-fail
+- porażki sekcji opcjonalnych zgłaszane outputami `optfail`/`optfail_sections` → workflow zakłada **deduplikowany issue** (kolejne przypadki jako komentarze)
 
 ## Zasady stałe (obowiązują zawsze)
 
@@ -61,5 +77,5 @@ PAT do GitHuba i klucz LOTTO_API_KEY są w **plikach projektu Kimi** (nigdy w re
 
 ## Zaległe / zaplanowane
 
-- **Test (a)** — wymuszona rekalibracja (`force`) na main po nowych losowaniach, zaplanowana na piątek 07.08.2026. Jeśli wagi przesuną się ≥ 0,0001 → pełna ścieżka publikacji odpali na żywo (v4.15.3); jeśli nie → kolejny dowód idempotencji (też poprawne).
+- **Test (a)** — wymuszona rekalibracja (`force`) na main. Zaplanowana była na 07.08.2026, ale NIE odpaliła (brak runów rekalibracji po 05.08) — do wykonania przy najbliższej okazji. Jeśli wagi przesuną się ≥ 0,0001 → pełna ścieżka publikacji odpali na żywo (v4.15.3); jeśli nie → kolejny dowód idempotencji (też poprawne).
 - Comiesięczne ticki crona rekalibracji do ~lutego 2027 będą kończyć się statusem „niedue" — to oczekiwane.
