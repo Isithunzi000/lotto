@@ -142,6 +142,29 @@ def fail(msg):
     sys.exit(1)
 
 
+# Raportowanie sekcji opcjonalnych (wypłaty/mediany/sprzedaż) — ich błąd NIE
+# może blokować commitu danych głównych (losowania, kumulacje, blob).
+optional_failures = []   # etykiety sekcji, które się wywaliły
+optional_notes = []      # nietypowe, ale obsłużone zdarzenia (np. pominięte luki)
+
+
+def soft(label, fn, *args):
+    """Odpala sekcję opcjonalną: błąd (także fail()/SystemExit) = ostrzeżenie
+    i kontynuacja sondy, zgłoszona później przez output optfail. Zwraca False
+    przy porażce — sekcje opcjonalne zwracają bool 'czy zmieniono', więc
+    False jest bezpieczną wartością domyślną."""
+    try:
+        return fn(*args)
+    except SystemExit:
+        optional_failures.append(label)
+        log(f'  UWAGA: sekcja opcjonalna „{label}" przerwana — kontynuuję sondę')
+        return False
+    except Exception as e:
+        optional_failures.append(label)
+        log(f'  UWAGA: sekcja opcjonalna „{label}" wywaliła się: {e} — kontynuuję sondę')
+        return False
+
+
 def api_get(path, params, api_key, fatal=True):
     """GET z nagłówkiem secret; retry na błędy sieci/5xx.
     fatal=False -> zwraca None zamiast przerywać (dane dodatkowe)."""
@@ -342,6 +365,19 @@ def embed_jackpots(jk_csv_text):
 
 # ---------- wypłaty Lotto ----------
 
+GAP_LOOKAHEAD = 5   # ile nowszych numerów sprawdzamy, zanim uznamy lukę za trwałą
+
+
+def _gap_is_permanent(fetch_fn, nr, last_id, api_key):
+    """True = któryś z GAP_LOOKAHEAD nowszych numerów ma już wypłaty, a nr nie,
+    czyli luka jest trwała (a nie „jeszcze nieopublikowane"). Deterministyczne:
+    zależy wyłącznie od stanu API. Dodatkowe zapytania tylko przy trafieniu luki."""
+    for ahead in range(nr + 1, min(nr + GAP_LOOKAHEAD, last_id) + 1):
+        if fetch_fn(ahead, api_key) is not None:
+            return True
+    return False
+
+
 def fetch_lotto_prize_rows(draw_id, api_key):
     """Wiersze CSV wypłat dla losowania Lotto (gameType=Lotto).
     None = wypłaty jeszcze nieopublikowane — dokończymy przy następnym runie."""
@@ -375,15 +411,24 @@ def update_wyplaty(api_key):
             existing = [l.rstrip('\n') for l in f if l.strip()]
     last_done = int(existing[-1].split(',')[0]) if existing else last_nr - WYPLATY_BACKFILL
     new_rows = []
+    skipped = []
     nr = last_done + 1
     while nr <= last_nr:
         rows = fetch_lotto_prize_rows(nr, api_key)
         if rows is None:
+            if _gap_is_permanent(fetch_lotto_prize_rows, nr, last_nr, api_key):
+                log(f'  OSTRZEŻENIE: wypłaty Lotto nr {nr} trwale niedostępne '
+                    f'(nowsze już są) — pomijam lukę')
+                skipped.append(nr)
+                nr += 1
+                continue
             log(f'  wypłaty: nr {nr} jeszcze nieopublikowane — dokończę później')
             break
         new_rows.extend(rows)
         time.sleep(REQUEST_PAUSE_S)
         nr += 1
+    if skipped:
+        optional_notes.append(f'pominięte trwałe luki wypłat Lotto: {skipped}')
     if not new_rows:
         return False
     with open(WYPLATY_PATH, 'a', encoding='utf-8', newline='') as f:
@@ -451,15 +496,25 @@ def update_wyplaty_game(path, draw_type, deg_keys, last_api_id, backfill, api_ke
             existing = [l.rstrip('\n') for l in f if l.strip()]
     last_done = int(existing[-1].split(',')[0]) if existing else last_api_id - backfill
     new_rows = []
+    skipped = []
     nr = last_done + 1
+    fetch_one = lambda n, key: fetch_game_prize_rows(draw_type, n, deg_keys, key)
     while nr <= last_api_id:
-        rows = fetch_game_prize_rows(draw_type, nr, deg_keys, api_key)
+        rows = fetch_one(nr, api_key)
         if rows is None:
+            if _gap_is_permanent(fetch_one, nr, last_api_id, api_key):
+                log(f'  OSTRZEŻENIE: wypłaty {draw_type} nr {nr} trwale niedostępne '
+                    f'(nowsze już są) — pomijam lukę')
+                skipped.append(nr)
+                nr += 1
+                continue
             log(f'  wypłaty {draw_type}: nr {nr} jeszcze nieopublikowane — dokończę później')
             break
         new_rows.extend(rows)
         time.sleep(REQUEST_PAUSE_S)
         nr += 1
+    if skipped:
+        optional_notes.append(f'pominięte trwałe luki wypłat {draw_type}: {skipped}')
     if not new_rows:
         return False
     with open(path, 'a', encoding='utf-8', newline='') as f:
@@ -680,31 +735,37 @@ def main():
             log('index.html: wbudowano zaktualizowane kumulacje (KUMULACJE_JSON)')
 
     # Wypłaty Lotto (v4.12.0, soft-fail: błąd nie blokuje wyników)
-    wyplaty_changed = update_wyplaty(api_key)
-    wyplaty_embedded = embed_wyplaty() if os.path.exists(WYPLATY_PATH) else False
+    wyplaty_changed = soft('wypłaty Lotto (CSV)', update_wyplaty, api_key)
+    wyplaty_embedded = (soft('mediany wypłat Lotto (embed)', embed_wyplaty)
+                        if os.path.exists(WYPLATY_PATH) else False)
     if wyplaty_embedded:
         log('index.html: wbudowano zaktualizowane mediany wypłat (WYPLATY_JSON)')
 
     # Wypłaty Mini Lotto i EuroJackpot (v4.13.0, soft-fail jak wyżej)
-    mini_changed = update_wyplaty_game(WYPLATY_MINI_PATH, 'MiniLotto', MINI_DEG_KEYS,
-                                       last_nr['mini_lotto'], WYPLATY_BACKFILL, api_key)
-    mini_embedded = embed_wyplaty_mini() if os.path.exists(WYPLATY_MINI_PATH) else False
+    mini_changed = soft('wypłaty MiniLotto (CSV)', update_wyplaty_game,
+                        WYPLATY_MINI_PATH, 'MiniLotto', MINI_DEG_KEYS,
+                        last_nr['mini_lotto'], WYPLATY_BACKFILL, api_key)
+    mini_embedded = (soft('mediany wypłat Mini Lotto (embed)', embed_wyplaty_mini)
+                     if os.path.exists(WYPLATY_MINI_PATH) else False)
     if mini_embedded:
         log('index.html: wbudowano mediany warunkowe wypłat Mini Lotto (WYPLATY_MINI_JSON)')
     ej_last_api = fetch_ej_last_api_id(api_key)
     ej_changed = False
     ej_embedded = False
     if ej_last_api:
-        ej_changed = update_wyplaty_game(WYPLATY_EJ_PATH, 'EuroJackpot', EJ_DEG_KEYS,
-                                         ej_last_api, WYPLATY_EJ_BACKFILL, api_key)
-        ej_embedded = embed_wyplaty_ej() if os.path.exists(WYPLATY_EJ_PATH) else False
+        ej_changed = soft('wypłaty EuroJackpot (CSV)', update_wyplaty_game,
+                          WYPLATY_EJ_PATH, 'EuroJackpot', EJ_DEG_KEYS,
+                          ej_last_api, WYPLATY_EJ_BACKFILL, api_key)
+        ej_embedded = (soft('średnie/mediany wypłat EuroJackpot (embed)', embed_wyplaty_ej)
+                       if os.path.exists(WYPLATY_EJ_PATH) else False)
         if ej_embedded:
             log('index.html: wbudowano średnie/mediany wypłat EuroJackpot (WYPLATY_EJ_JSON)')
     else:
         log('  wypłaty EuroJackpot: nie udało się pobrać ostatniego ID — pomijam')
 
     # Sprzedaż zakładów Lotto (v4.14.0) — czysta funkcja wyplaty_lotto.csv
-    sprzedaz_embedded = embed_sprzedaz() if os.path.exists(WYPLATY_PATH) else False
+    sprzedaz_embedded = (soft('estymacje sprzedaży (embed)', embed_sprzedaz)
+                         if os.path.exists(WYPLATY_PATH) else False)
     if sprzedaz_embedded:
         log('index.html: wbudowano estymacje sprzedaży (SPRZEDAZ_JSON)')
 
@@ -718,6 +779,7 @@ def main():
             and not sprzedaz_embedded):
         log('Brak nowych danych — repo bez zmian.')
         write_github_output('false', '')
+        report_optional()
         return
 
     through = max(datetime.strptime(d, '%d.%m.%Y').date() for d in last_dates.values())
@@ -735,6 +797,30 @@ def main():
             summary = 'data: wypłaty (mediany/średnie z 30 losowań)'
         log(summary)
     write_github_output('true', summary)
+    report_optional()
+
+
+def report_optional():
+    """Raportuje porażki sekcji opcjonalnych do logu i GITHUB_OUTPUT
+    (optfail=true + optfail_sections=... -> krok workflow zakłada issue).
+    Nie zmienia kodu wyjścia — dane główne są ważniejsze niż statystyki."""
+    for note in optional_notes:
+        log(f'UWAGA: {note}')
+    if optional_failures:
+        sections = ', '.join(optional_failures)
+        log(f'::warning::sekcje opcjonalne z błędami: {sections}')
+        write_github_output_kv('optfail', 'true')
+        write_github_output_kv('optfail_sections', sections)
+    if optional_notes:
+        write_github_output_kv('optnotes', ' | '.join(optional_notes))
+
+
+def write_github_output_kv(key, value):
+    out = os.environ.get('GITHUB_OUTPUT')
+    if not out:
+        return
+    with open(out, 'a', encoding='utf-8') as f:
+        f.write(f'{key}={value}\n')
 
 
 def write_github_output(changed, summary):
