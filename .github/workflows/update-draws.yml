@@ -25,9 +25,19 @@ on:
 permissions:
   contents: write
 
+# HARDENING: jeden run naraz. Opóźniony cron (GitHub bywa spóźniony o 1-2 h)
+# może się złożyć z kolejnym — bez tej grupy dwa runy ścigały się o push
+# i przegrywający dostawał non-fast-forward. cancel-in-progress: false
+# = kolejny run CZEKA w kolejce zamiast ubijać bieżący (dane i tak dogoni,
+# bo skrypt uzupełnia luki).
+concurrency:
+  group: sonda-lotto
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 15   # zdrowy run trwa <1 min; 15 min = dead-man switch
     steps:
       - uses: actions/checkout@v4
 
@@ -39,16 +49,55 @@ jobs:
         id: fetch
         env:
           LOTTO_API_KEY: ${{ secrets.LOTTO_API_KEY }}
-        run: python3 tools/update_draws.py
+        # HARDENING: jedna automatyczna ponówka po 60 s. Skrypt ma własne
+        # retry HTTP per zapytanie, ale przejściowa awaria API/runnera
+        # nie powinna od razu wysyłać maila o porażce. Skrypt jest
+        # idempotentny — drugie odpalenie jest bezpieczne.
+        run: |
+          if ! python3 tools/update_draws.py; then
+            echo "::warning::sonda nie powiodła się — ponawiam za 60 s"
+            sleep 60
+            python3 tools/update_draws.py
+          fi
 
-      - name: Commit zaktualizowanych danych
+      - name: Commit i push zaktualizowanych danych
         if: steps.fetch.outputs.changed == 'true'
+        env:
+          SUMMARY: ${{ steps.fetch.outputs.summary }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/ index.html
-          git commit -m "${{ steps.fetch.outputs.summary }}"
-          git push
+
+          # HARDENING: guard na pusty staging — "nothing to commit" (exit 1)
+          # nie jest błędem wartym czerwonego krzyżyka.
+          if git diff --cached --quiet; then
+            echo "Skrypt zgłosił zmiany, ale staging jest pusty — pomijam commit."
+            exit 0
+          fi
+
+          git commit -m "$SUMMARY"
+
+          # HARDENING: push odporny na przejściowe problemy i wyścigi:
+          # pull --rebase wyrównuje z main (gdyby inny run zdążył wypchnąć),
+          # a pętla robi do 3 prób z rosnącą pauzą. Dopiero potrójna porażka
+          # kończy run błędem.
+          ok=""
+          for i in 1 2 3; do
+            if ! git pull --rebase origin main; then
+              git rebase --abort || true
+            fi
+            if git push; then
+              ok=1
+              break
+            fi
+            echo "::warning::push: próba $i nieudana — ponawiam za $((i * 15)) s"
+            sleep $((i * 15))
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::push nie powiódł się po 3 próbach — dane zostaną dograne przy następnym runie"
+            exit 1
+          fi
 
       - name: Brak nowych danych
         if: steps.fetch.outputs.changed == 'false'
