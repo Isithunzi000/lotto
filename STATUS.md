@@ -45,6 +45,7 @@ Po dwóch fałszywych alarmach „Run failed" (kolejka runnerów GitHub + wyści
 - **guard na pusty staging** zamiast „nothing to commit" (exit 1)
 - **timeout-minutes** na każdym jobie (10–20 min)
 - **akcje v7** (`checkout`, `setup-python`) — Node 24, koniec warningów deprecacji
+- **idempotentny release** (15.08.2026): krok release w `tag-version.yml` nie zależy już od flagi `created` — sprawdza `gh release view`, tworzy tylko brakujący release (z retry ×3 i re-checkiem), notatka z commita taga. Zamyka lukę: tag wypchnięty + porażka release → wcześniej release nigdy by nie powstał
 
 Zmiany w `tools/update_draws.py` (13.08.2026):
 

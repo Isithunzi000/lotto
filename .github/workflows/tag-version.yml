@@ -68,11 +68,35 @@ jobs:
           fi
           echo "created=true" >> "$GITHUB_OUTPUT"
           echo "utworzono tag $V"
-      - name: Utwórz GitHub Release z notatką z commita wersji
-        if: steps.tag.outputs.created == 'true'
+      - name: Utwórz GitHub Release z notatką z commita wersji (idempotentnie)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           V: ${{ steps.tag.outputs.version }}
         run: |
-          gh release create "$V" --title "$V" --notes "$(git log -1 --format=%B HEAD)"
+          # HARDENING: krok NIE zależy od flagi created — gdy poprzedni run
+          # wypchnął tag, ale padł na tworzeniu release, ten krok i tak go
+          # domknie. Istniejący release = no-op. Notatkę bierzemy z commita
+          # TAGA (nie z HEAD — przy domykającym runie HEAD to już inny commit).
+          if gh release view "$V" >/dev/null 2>&1; then
+            echo "release $V już istnieje — pomijam"
+            exit 0
+          fi
+          ok=""
+          for i in 1 2 3; do
+            if gh release create "$V" --title "$V" --notes "$(git log -1 --format=%B "$V")"; then
+              ok=1
+              break
+            fi
+            echo "::warning::release $V: próba $i nieudana — ponawiam za $((i * 10)) s"
+            sleep $((i * 10))
+          done
+          if [ -z "$ok" ]; then
+            # re-check: release mógł powstać mimo błędnej odpowiedzi (timeout po zapisie)
+            if gh release view "$V" >/dev/null 2>&1; then
+              echo "release $V istnieje mimo błędu odpowiedzi — traktuję jako OK"
+              exit 0
+            fi
+            echo "::error::release $V nie powiódł się po 3 próbach"
+            exit 1
+          fi
           echo "utworzono release $V"
