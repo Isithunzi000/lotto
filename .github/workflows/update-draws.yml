@@ -8,18 +8,31 @@ name: Sonda wyników LOTTO
 # Klucz API siedzi wyłącznie w sekrecie repo — nigdy nie trafia do plików ani logów.
 #
 # Harmonogram (UTC) — losowania trzymają stałą godzinę lokalną (Warszawa):
-#   MM 14:00, Eurojackpot 20:15, reszta 22:00.
-#   13:35 UTC = 15:35 CEST / 14:35 CET  -> po MM 14:00
-#   21:35 UTC = 23:35 CEST / 22:35 CET  -> po losowaniach 22:00
-#   22:35 UTC = 00:35 CEST / 23:35 CET  -> zapasowa (opóźniona publikacja)
+#   MM 14:00, Eurojackpot 20:15 (wt/pt), reszta 22:00.
+# Cron jest w UTC, a losowania w czasie lokalnym — dla każdego celu są więc
+# DWA crony (para sezonowa): jeden trafiony latem, drugi zimą. Run „poza
+# sezonem" ląduje przed losowaniem i kończy się pusto — skrypt jest
+# idempotentny, więc to koszt ~30 s runnera bez commitu.
+#   MM 14:00:       12:35 UTC = 14:35 CEST (lato)  | 13:35 UTC = 14:35 CET (zima)
+#   EJ 20:15 wt/pt: 19:15 UTC = 21:15 CEST (lato)  | 20:15 UTC = 21:15 CET (zima)  (+60 min — EJ publikuje wolno)
+#   Blok 22:00:     20:45 UTC = 22:45 CEST (lato)  | 21:35 UTC = 22:35 CET (zima)  (+45/+35 min — bufor publikacji)
+#   Zapas:          22:35 UTC = 00:35 CEST / 23:35 CET (opóźniona publikacja)
+#   Wyciągarka:     06:15 UTC = 08:15 CEST / 07:15 CET (domyka wszystko, co umknęło w nocy)
+# Minuty poza :00/:30 (korki crona GitHuba); odstępy między runami >= 30 min,
+# żeby grupa współbieżności nie kolejkowała runów w nieskończoność.
 # Skrypt jest idempotentny — sonda bez nowych danych kończy się bez commitu,
 # a luka (np. tydzień przestoju) jest uzupełniana dzień po dniu przy najbliższym runie.
 
 on:
   schedule:
+    - cron: '35 12 * * *'
     - cron: '35 13 * * *'
+    - cron: '15 19 * * 2,5'
+    - cron: '15 20 * * 2,5'
+    - cron: '45 20 * * *'
     - cron: '35 21 * * *'
     - cron: '35 22 * * *'
+    - cron: '15 6 * * *'
   workflow_dispatch:
 
 permissions:
