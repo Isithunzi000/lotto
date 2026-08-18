@@ -7,6 +7,14 @@ regulaminy, tabele wygranych, kumulacje oraz promocje okresowe.
 
 **Wersja online:** https://isithunzi000.github.io/lotto/
 
+Aplikacja jest też **PWA**: z poziomu przeglądarki można ją „zainstalować"
+na ekranie głównym telefonu lub pulpicie (ikona, tryb pełnoekranowy),
+a po pierwszym otwarciu działa w pełni offline dzięki service workerowi
+(`sw.js` — strategia network-first: online zawsze ładuje najświeższe
+losowania, offline wraca do cache). Pliki PWA: `manifest.webmanifest`,
+`sw.js`, `icons/`. Cache jest wersjonowany numerem wersji aplikacji,
+więc aktualizacja aplikacji = automatyczna wymiana cache.
+
 Można też pobrać `index.html` i otworzyć lokalnie w przeglądarce —
 kalkulator działa w 100% offline, bez serwera i bez instalacji.
 

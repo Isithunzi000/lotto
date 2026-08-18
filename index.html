@@ -2,6 +2,13 @@
 <html lang="pl" data-theme="light"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0f1418">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kalkulator Lotto">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="description" content="Kalkulator wartości oczekiwanej (EV/RTP) gier liczbowych Totalizatora Sportowego: Lotto, Multi Multi, Eurojackpot, Mini Lotto, Ekstra Pensja. Historia losowań, statystyki, systemy, kumulacje — wszystko offline, w jednym pliku.">
 <meta property="og:title" content="Kalkulator EV — gry liczbowe">
 <meta property="og:description" content="Ile naprawdę wraca z każdej złotówki? EV, RTP, historia losowań, systemy i kumulacje — jeden plik HTML, działa offline.">
@@ -569,7 +576,7 @@
 <div class="app-shell">
 <header>
   <div class="header-top">
-    <div class="version-tag">v4.15.3 | 13-08-2026</div>
+    <div class="version-tag">v4.15.4 | 19-08-2026</div>
     <div class="theme-toggle" id="themeToggle">
       <span class="opt" data-theme="dark">Ciemny</span>
       <span class="opt active" data-theme="light">Jasny</span>
@@ -11217,7 +11224,15 @@ async function compareAllPermutationsPopularity() {
 }
 
 </script>
-
-
+<script>
+// v4.15.4: PWA — rejestracja service workera (offline + instalacja na ekranie głównym).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.warn('SW: rejestracja nie powiodła się:', e);
+    });
+  });
+}
+</script>
 
 </body></html>
