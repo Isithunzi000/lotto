@@ -66,8 +66,8 @@ Zmiany w `tools/update_draws.py` (13.08.2026):
 
 ## Dane techniczne (dla orientacji)
 
-- Kluczowe consty w `index.html`: `KUMULACJE_JSON`, `WYPLATY_JSON`, `POPULARNOSC_KALIBR_JSON`, `POPULARNOSC_KALIBR_MINI_JSON` (ok. linie 8324–8346)
-- Skalibrowane wagi: Lotto w=1,03, wr=1,0165 (n=500); Mini w=1,0189, wr=1,0101 (n=500); stan na 04.08.2026
+- Kluczowe consty w `index.html`: `KUMULACJE_JSON`, `WYPLATY_JSON`, `POPULARNOSC_KALIBR_JSON`, `POPULARNOSC_KALIBR_MINI_JSON` (ok. linie 8333–8353)
+- Skalibrowane wagi: Lotto w=1,0302, wr=1,016 (n=503, stan 11.08.2026); Mini w=1,0191, wr=1,0112 (n=508, stan 12.08.2026)
 - CSV wypłat (wyplaty_lotto.csv, wyplaty_minilotto.csv) są append-only — okno kalibracji rośnie
 
 ## Sekrety

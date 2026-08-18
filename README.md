@@ -70,8 +70,12 @@ z jaką wartością oczekiwaną.
 ## Aktualizacja danych
 
 Baza wyników jest zaszyta w aplikacji i aktualizowana automatycznie —
-sonda (GitHub Actions, 3× dziennie) odpytuje oficjalne LOTTO OpenAPI
-i dopisuje nowe losowania. Pliki w repo:
+sonda (GitHub Actions) odpytuje oficjalne LOTTO OpenAPI i dopisuje nowe
+losowania. Harmonogram (od 15.08.2026): 8 cronów w parach sezonowych
+(lato/zima, bo losowania trzymają czas warszawski, a cron jest UTC) —
+po każdym losowaniu Multi Multi, Eurojackpot i bloku wieczornego,
+plus poranna wyciągarka domykająca to, co umknęło w nocy. Typowa
+świeżość danych po losowaniu: ~35–60 min. Pliki w repo:
 
 - `data/*.csv` — pełna historia wyników 7 gier, format 1:1
   z wynikilotto.net.pl (zweryfikowane, bez historycznych błędów)
@@ -80,7 +84,7 @@ i dopisuje nowe losowania. Pliki w repo:
   (źródło domyślnych estymacji 4/6 i 5/6 w zakładce EV; z liczb zwycięzców
   3/4/5-trafień sonda estymuje też sprzedaż zakładów wg głębokości kumulacji
   — presety sprzedaży w panelu „Kumulacja a EV")
-- `data/wyplaty_minilotto.csv` — faktyczne wypłaty Mini Lotto (500 losowań;
+- `data/wyplaty_minilotto.csv` — faktyczne wypłaty Mini Lotto (append-only;
   mediany warunkowe „padła/nie padła 5/5" — szacunek EV w zakładce EV,
   a liczby zwycięzców 3/4-trafień zasilają kalibrację wag popularności)
 - `data/wyplaty_eurojackpot.csv` — faktyczne wypłaty Eurojackpot
