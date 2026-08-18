@@ -9,13 +9,14 @@
 
 - **Repo**: github.com/Isithunzi000/lotto (publiczne), gałąź `main`
 - **Live**: isithunzi000.github.io/lotto/ (GitHub Pages)
-- **Aplikacja**: jednoplikowy kalkulator lotto (`index.html`, ~1,5 MB, 100% offline). Baza losowań osadzona jako gzip+base64 w zakotwiczonej linii `const HIST_DATA_B64 = "H4sI..."`.
+- **Aplikacja**: jednoplikowy kalkulator lotto (`index.html`, ~1,5 MB, 100% offline). Baza losowań osadzona jako gzip+base64 w zakotwiczonej linii `const HIST_DATA_B64 = "H4sI..."`. Od v4.15.4 aplikacja jest **PWA**: `manifest.webmanifest` + `sw.js` (network-first, cache wersjonowany `lotto-ev-vX.Y.Z`) + `icons/` (192/512/maskable/apple). Instalacja na ekranie głównym, pełny offline po pierwszym otwarciu. **Uwaga dla edycji**: przy bumpie wersji aplikacji zaktualizować też `CACHE` w `sw.js` (wymiana cache u użytkowników).
 - **Dokumentacja techniczna**: README.md opisuje całą automatykę.
 
-## Stan w chwili ostatniej aktualizacji (13.08.2026)
+## Stan w chwili ostatniej aktualizacji (19.08.2026)
 
-- **Wersja**: v4.15.3 (tag + release istnieją) — auto-kalibracja wag 13.08.2026, strażnicy G1-G7 OK
-- **main**: `923d3f8` — dane losowań aktualne do 13.08.2026
+- **Wersja**: v4.15.4 — PWA (manifest + service worker + ikony; zmiana czysto addytywna, logika aplikacji bez zmian)
+- **Testy PWA przed publikacją**: manifest JSON OK, składnia sw.js OK, wszystkie 7 zasobów serwowane, SW rejestruje się i przechodzi w `activated`, cache `lotto-ev-v4.15.4` kompletny (7 wpisów), strona ładuje się w pełni offline (test Playwright: online → offline reload, identyczny DOM), konsola bez błędów
+- **Poprzednio**: v4.15.3 — auto-kalibracja wag 13.08.2026, strażnicy G1-G7 OK
 - **Wagi po kalibracji 13.08**: Lotto w=1,0302, wr=1,016 (n=503, stan 11.08); Mini w=1,0191, wr=1,0112 (n=508, stan 12.08)
 - **Issues**: 0 otwartych
 - **CI**: pełny hardening wdrożony i zweryfikowany runami na żywo (wszystkie zielone)
