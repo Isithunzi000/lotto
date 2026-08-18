@@ -14,7 +14,7 @@
 
 ## Stan w chwili ostatniej aktualizacji (19.08.2026)
 
-- **Wersja**: v4.15.4 — PWA (manifest + service worker + ikony; zmiana czysto addytywna, logika aplikacji bez zmian)
+- **Wersja**: v4.15.5 — PWA (manifest + service worker + ikony; zmiana czysto addytywna, logika aplikacji bez zmian); v4.15.5 skraca nazwę w manifeście do „Kalkulator Lotto" + wymiana cache SW
 - **Testy PWA przed publikacją**: manifest JSON OK, składnia sw.js OK, wszystkie 7 zasobów serwowane, SW rejestruje się i przechodzi w `activated`, cache `lotto-ev-v4.15.4` kompletny (7 wpisów), strona ładuje się w pełni offline (test Playwright: online → offline reload, identyczny DOM), konsola bez błędów
 - **Poprzednio**: v4.15.3 — auto-kalibracja wag 13.08.2026, strażnicy G1-G7 OK
 - **Wagi po kalibracji 13.08**: Lotto w=1,0302, wr=1,016 (n=503, stan 11.08); Mini w=1,0191, wr=1,0112 (n=508, stan 12.08)
