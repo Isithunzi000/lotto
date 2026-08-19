@@ -9,7 +9,7 @@
 
 - **Repo**: github.com/Isithunzi000/lotto (publiczne), gałąź `main`
 - **Live**: isithunzi000.github.io/lotto/ (GitHub Pages)
-- **Aplikacja**: jednoplikowy kalkulator lotto (`index.html`, ~1,5 MB, 100% offline). Baza losowań osadzona jako gzip+base64 w zakotwiczonej linii `const HIST_DATA_B64 = "H4sI..."`. Od v4.15.4 aplikacja jest **PWA**: `manifest.webmanifest` + `sw.js` (network-first, cache wersjonowany `lotto-ev-vX.Y.Z`) + `icons/` (192/512/maskable/apple). Instalacja na ekranie głównym, pełny offline po pierwszym otwarciu. **Uwaga dla edycji**: przy bumpie wersji aplikacji zaktualizować też `CACHE` w `sw.js` (wymiana cache u użytkowników).
+- **Aplikacja**: jednoplikowy kalkulator lotto (`index.html`, ~1,5 MB, 100% offline). Baza losowań osadzona jako gzip+base64 w zakotwiczonej linii `const HIST_DATA_B64 = "H4sI..."`. Od v4.15.4 aplikacja jest **PWA**: `manifest.webmanifest` + `sw.js` (network-first, cache wersjonowany `lotto-ev-vX.Y.Z`) + `icons/` (192/512/maskable/apple). Instalacja na ekranie głównym, pełny offline po pierwszym otwarciu. **Uwaga dla edycji**: przy ręcznym bumpie wersji aplikacji zaktualizować też `CACHE` w `sw.js` (wymiana cache u użytkowników); auto-rekalibracja robi to sama od 19.08.2026 (krok bumpu w `recalibrate.yml`).
 - **Dokumentacja techniczna**: README.md opisuje całą automatykę.
 
 ## Stan w chwili ostatniej aktualizacji (19.08.2026)
