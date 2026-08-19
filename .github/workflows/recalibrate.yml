@@ -140,6 +140,15 @@ jobs:
           assert src.count(m.group(0)) == 1, 'version-tag nieunikalny'
           open('index.html', 'w', encoding='utf-8').write(src.replace(m.group(0), new_tag))
           print(f'bump: {new_v} | {today}')
+          # PWA: cache SW trzyma wersję aplikacji (konwencja z STATUS.md) —
+          # bump bez synchronizacji zostawiłby stary numer cache.
+          sw = open('sw.js', encoding='utf-8').read()
+          m_sw = re.search(r"const CACHE = 'lotto-ev-v\d+\.\d+\.\d+';", sw)
+          assert m_sw, 'CACHE nie znaleziony w sw.js'
+          assert sw.count(m_sw.group(0)) == 1, 'CACHE nieunikalny'
+          open('sw.js', 'w', encoding='utf-8').write(
+              sw.replace(m_sw.group(0), f"const CACHE = 'lotto-ev-{new_v}';"))
+          print(f'cache SW -> lotto-ev-{new_v}')
           EOF
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
