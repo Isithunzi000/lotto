@@ -75,7 +75,10 @@ losowania. Harmonogram (od 15.08.2026): 8 cronów w parach sezonowych
 (lato/zima, bo losowania trzymają czas warszawski, a cron jest UTC) —
 po każdym losowaniu Multi Multi, Eurojackpot i bloku wieczornego,
 plus poranna wyciągarka domykająca to, co umknęło w nocy. Typowa
-świeżość danych po losowaniu: ~35–60 min. Pliki w repo:
+świeżość danych po losowaniu: ~35–60 min. API publikuje wyniki od razu,
+a identyfikatory losowań doszywa z opóźnieniem — sonda pomija wtedy
+świeże losowanie danej gry (dopisuje je następnym razem), a gdy opóźnienie
+przekroczy dobę, zgłasza błąd krytyczny. Pliki w repo:
 
 - `data/*.csv` — pełna historia wyników 7 gier, format 1:1
   z wynikilotto.net.pl (zweryfikowane, bez historycznych błędów)

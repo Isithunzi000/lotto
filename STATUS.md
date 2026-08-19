@@ -3,7 +3,7 @@
 > Punkt startowy dla nowych sesji/czatów pracujących nad projektem.
 > Aktualizowany w tym samym commicie co każda większa zmiana.
 > **Repo jest publiczne — w tym pliku NIGDY nie ma sekretów, kluczy ani danych osobowych.**
-> Ostatnia aktualizacja: **15.08.2026**
+> Ostatnia aktualizacja: **19.08.2026**
 
 ## Projekt
 
@@ -24,6 +24,7 @@
 ## Automatyka (GitHub Actions)
 
 1. **Sonda** (`tools/update_draws.py` + `.github/workflows/update-draws.yml`) — pobiera wyniki z oficjalnego LOTTO OpenAPI, aktualizuje dane w `index.html`, idempotentna.
+   - **Hardening guarda numeracji (19.08.2026)**: API publikuje wynik od razu, a `drawSystemId` doszywa później (zmierzone ~75 min po losowaniu 18.08). Nowa semantyka: **świeże** losowanie z `drawSystemId=None` (do końca dnia D+1, czas warszawski) jest pomijane po cichu **per gra** (reszta dopisuje się normalnie; run zielony z adnotacją `::warning::` i outputami `noneskip`/`noneskip_items`); **stare None** (>1 doby) pozostaje hard failem — to zarazem strażnik świeżości: baza nie odstanie o ponad dobę bez czerwonego runu i maila. Mismatch ID i None na starszych losowaniach — bez zmian, hard fail globalny. Pokryte testami fixture'owymi (6 scenariuszy, 24 asercje: skip per gra, hard fail starego None, regresja normalnego przebiegu, idempotencja pominięcia, granica progu, eskalacja przy odstającej bazie).
    - **Harmonogram od 15.08.2026: 8 cronów w parach sezonowych** (losowania trzymają czas warszawski, cron jest UTC — dla każdego celu 2 crony: lato/zima; run „poza sezonem" kończy się pusto): MM 14:00 → +35 min (`35 12`/`35 13` UTC); EJ 20:15 wt/pt → +60 min (`15 19`/`15 20` UTC `2,5`); blok 22:00 → +45 lato/+35 zima (`45 20`/`35 21` UTC); zapas `35 22` UTC; **poranna wyciągarka** `15 6` UTC (domyka, co umknęło w nocy). Minuty poza :00/:30, odstępy ≥30 min.
    - Typowa świeżość po losowaniu: ~35–60 min; worst case: rano następnego dnia (backfill).
 2. **Auto-tag/release** (`tag-version.yml`) — po wykryciu nowej wersji w `version-tag` tworzy tag i release. Uwaga: pushe z GITHUB_TOKEN NIE odpalają innych workflow — dlatego rekalibracja wywołuje go jawnie.
