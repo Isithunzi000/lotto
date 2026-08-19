@@ -3,7 +3,7 @@
 > Punkt startowy dla nowych sesji/czatów pracujących nad projektem.
 > Aktualizowany w tym samym commicie co każda większa zmiana.
 > **Repo jest publiczne — w tym pliku NIGDY nie ma sekretów, kluczy ani danych osobowych.**
-> Ostatnia aktualizacja: **19.08.2026**
+> Ostatnia aktualizacja: **19.08.2026** (próba generalna + v4.15.6)
 
 ## Projekt
 
@@ -14,7 +14,8 @@
 
 ## Stan w chwili ostatniej aktualizacji (19.08.2026)
 
-- **Wersja**: v4.15.5 — PWA (manifest + service worker + ikony; zmiana czysto addytywna, logika aplikacji bez zmian); v4.15.5 skraca nazwę w manifeście do „Kalkulator Lotto" + wymiana cache SW
+- **Wersja**: v4.15.6 — auto-kalibracja wag 19.08.2026 (próba generalna na żywo: determinizm bajt w bajt + strażnicy G1-G7 + pełna ścieżka publikacji). Wagi: Lotto w=1,0312, wr=1,0133 (n=506, stan 18.08); Mini w=1,0191, wr=1,0089 (n=514, stan 18.08). Cache SW zsynchronizowany do v4.15.6
+- **Poprzednio**: v4.15.5 — PWA „Kalkulator Lotto" (manifest + service worker + ikony; zmiana czysto addytywna)
 - **Testy PWA przed publikacją**: manifest JSON OK, składnia sw.js OK, wszystkie 7 zasobów serwowane, SW rejestruje się i przechodzi w `activated`, cache `lotto-ev-v4.15.4` kompletny (7 wpisów), strona ładuje się w pełni offline (test Playwright: online → offline reload, identyczny DOM), konsola bez błędów
 - **Poprzednio**: v4.15.3 — auto-kalibracja wag 13.08.2026, strażnicy G1-G7 OK
 - **Wagi po kalibracji 13.08**: Lotto w=1,0302, wr=1,016 (n=503, stan 11.08); Mini w=1,0191, wr=1,0112 (n=508, stan 12.08)
