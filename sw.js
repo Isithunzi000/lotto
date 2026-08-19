@@ -3,8 +3,8 @@
 // sondę 3×/dziennie — użytkownik online ma zawsze świeże losowania), z fallbackiem
 // do cache offline. Statyczne zasoby (ikony, manifest): cache-first.
 // Wersja cache powiązana z wersją aplikacji — bump wersji aplikacji = wymiana cache.
-// v4.15.5: nazwa aplikacji w manifeście skrócona do „Kalkulator Lotto" — wymiana cache.
-const CACHE = 'lotto-ev-v4.15.5';
+// v4.15.6: synchronizacja po auto-kalibracji — wymiana cache.
+const CACHE = 'lotto-ev-v4.15.6';
 const CORE = [
   './',
   'index.html',
