@@ -99,6 +99,16 @@ JACKPOT_GAMES = [('lotto', 'Lotto'), ('eurojackpot', 'EuroJackpot')]
 ALIGNED_ID_GAMES = {'lotto', 'lotto_plus', 'multi_multi', 'mini_lotto',
                     'ekstra_pensja', 'ekstra_premia'}
 
+# Hardening guarda numeracji (19.08.2026): API publikuje wynik od razu, a
+# drawSystemId doszywa później (zaobserwowane ~75 min po losowaniu 18.08.2026 —
+# run 20:37 UTC dostał None i słusznie odmówił zapisu). Świeże losowanie z
+# None pomijamy po cichu (per gra) — dopiszemy je, gdy ID się pojawi.
+# None starsze niż FRESH_NONE_ID_DAYS = trwała anomalia -> hard fail; to
+# zarazem strażnik świeżości: baza nie odstanie o >1 dobę bez alarmu.
+# Próg w dobach kalendarzowych czasu warszawskiego: losowanie z dnia D jest
+# „świeże" do końca dnia D+1 (deterministyczne w obrębie doby).
+FRESH_NONE_ID_DAYS = 1
+
 # ---------- wypłaty Lotto (v4.12.0) ----------
 # Faktyczne wypłaty per stopień z endpointu draw-prizes — źródło domyślnych
 # „Szac. wygrana czwórka/piątka" w panelu kumulacji kalkulatora.
@@ -146,6 +156,7 @@ def fail(msg):
 # może blokować commitu danych głównych (losowania, kumulacje, blob).
 optional_failures = []   # etykiety sekcji, które się wywaliły
 optional_notes = []      # nietypowe, ale obsłużone zdarzenia (np. pominięte luki)
+none_id_skipped = []     # świeże losowania pominięte przez None drawSystemId
 
 
 def soft(label, fn, *args):
@@ -691,6 +702,23 @@ def main():
                     continue
                 api_id = item.get('drawSystemId')
                 if game in ALIGNED_ID_GAMES:
+                    if api_id is None:
+                        # Stan przejściowy publikacji: wynik jest, ID jeszcze
+                        # nie. Świeże losowanie pomijamy po cichu (tylko ta
+                        # gra) — dopiszemy je następnym runem, gdy ID się
+                        # pojawi. Starsze None = trwała anomalia -> hard fail
+                        # (strażnik świeżości: baza nie odstanie bez alarmu).
+                        draw_day = datetime.strptime(rec[1], '%d.%m.%Y').date()
+                        if (today - draw_day).days <= FRESH_NONE_ID_DAYS:
+                            none_id_skipped.append(f'{game} {rec[1]}')
+                            log(f'  UWAGA: {game}: pomijam losowanie {rec[1]} — API '
+                                f'nie podało drawSystemId (stan przejściowy); '
+                                f'dopiszę, gdy ID się pojawi')
+                            continue
+                        doba = '1 doby' if FRESH_NONE_ID_DAYS == 1 else f'{FRESH_NONE_ID_DAYS} dób'
+                        fail(f'{game}: konflikt numeracji — API nadal zwraca '
+                             f'drawSystemId None dla losowania {rec[1]} (starsze niż '
+                             f'{doba}). Przerwano bez zapisu.')
                     if not isinstance(api_id, int) or api_id <= last_nr[game]:
                         # Twarde zabezpieczenie append-only: nowe losowanie gry
                         # o zsynchronizowanej numeracji MUSI mieć świeży numer.
@@ -803,7 +831,15 @@ def main():
 def report_optional():
     """Raportuje porażki sekcji opcjonalnych do logu i GITHUB_OUTPUT
     (optfail=true + optfail_sections=... -> krok workflow zakłada issue).
-    Nie zmienia kodu wyjścia — dane główne są ważniejsze niż statystyki."""
+    Nie zmienia kodu wyjścia — dane główne są ważniejsze niż statystyki.
+    Dodatkowo raportuje świeże losowania pominięte przez None drawSystemId
+    (noneskip) — zielony run, ale z widoczną adnotacją w podsumowaniu."""
+    if none_id_skipped:
+        items = ', '.join(none_id_skipped)
+        log(f'::warning::pominięto {len(none_id_skipped)} świeżych losowań bez '
+            f'drawSystemId (stan przejściowy API): {items} — dopiszę, gdy ID się pojawi')
+        write_github_output_kv('noneskip', 'true')
+        write_github_output_kv('noneskip_items', items)
     for note in optional_notes:
         log(f'UWAGA: {note}')
     if optional_failures:
