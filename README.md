@@ -8,12 +8,8 @@ regulaminy, tabele wygranych, kumulacje oraz promocje okresowe.
 **Wersja online:** https://isithunzi000.github.io/lotto/
 
 Aplikacja jest też **PWA**: z poziomu przeglądarki można ją „zainstalować"
-na ekranie głównym telefonu lub pulpicie (ikona, tryb pełnoekranowy),
-a po pierwszym otwarciu działa w pełni offline dzięki service workerowi
-(`sw.js` — strategia network-first: online zawsze ładuje najświeższe
-losowania, offline wraca do cache). Pliki PWA: `manifest.webmanifest`,
-`sw.js`, `icons/`. Cache jest wersjonowany numerem wersji aplikacji,
-więc aktualizacja aplikacji = automatyczna wymiana cache.
+na ekranie głównym telefonu lub pulpicie, a po pierwszym otwarciu działa
+w pełni offline.
 
 Można też pobrać `index.html` i otworzyć lokalnie w przeglądarce —
 kalkulator działa w 100% offline, bez serwera i bez instalacji.
@@ -69,49 +65,15 @@ z jaką wartością oczekiwaną.
 
 ## Aktualizacja danych
 
-Baza wyników jest zaszyta w aplikacji i aktualizowana automatycznie —
-sonda (GitHub Actions) odpytuje oficjalne LOTTO OpenAPI i dopisuje nowe
-losowania. Harmonogram (od 15.08.2026): 8 cronów w parach sezonowych
-(lato/zima, bo losowania trzymają czas warszawski, a cron jest UTC) —
-po każdym losowaniu Multi Multi, Eurojackpot i bloku wieczornego,
-plus poranna wyciągarka domykająca to, co umknęło w nocy. Typowa
-świeżość danych po losowaniu: ~35–60 min. API publikuje wyniki od razu,
-a identyfikatory losowań doszywa z opóźnieniem — sonda pomija wtedy
-świeże losowanie danej gry (dopisuje je następnym razem), a gdy opóźnienie
-przekroczy dobę, zgłasza błąd krytyczny. Pliki w repo:
+Baza wyników jest zaszyta w aplikacji i aktualizowana automatycznie — sonda
+(GitHub Actions) odpytuje oficjalne LOTTO OpenAPI po każdym losowaniu;
+typowa świeżość danych to ~35–60 min. Dane leżą w `data/*.csv` (historia
+wyników, kumulacje, faktyczne wypłaty). Szczegóły automatyki:
+[STATUS.md](STATUS.md).
 
-- `data/*.csv` — pełna historia wyników 7 gier, format 1:1
-  z wynikilotto.net.pl (zweryfikowane, bez historycznych błędów)
-- `data/kumulacje.csv` — aktualne kumulacje Lotto i Eurojackpot
-- `data/wyplaty_lotto.csv` — faktyczne wypłaty per stopień dla Lotto
-  (źródło domyślnych estymacji 4/6 i 5/6 w zakładce EV; z liczb zwycięzców
-  3/4/5-trafień sonda estymuje też sprzedaż zakładów wg głębokości kumulacji
-  — presety sprzedaży w panelu „Kumulacja a EV")
-- `data/wyplaty_minilotto.csv` — faktyczne wypłaty Mini Lotto (append-only;
-  mediany warunkowe „padła/nie padła 5/5" — szacunek EV w zakładce EV,
-  a liczby zwycięzców 3/4-trafień zasilają kalibrację wag popularności)
-- `data/wyplaty_eurojackpot.csv` — faktyczne wypłaty Eurojackpot
-  (średnie i mediany stopni V–XII — szacunek EV niższych stopni;
-  kolumna nr to identyfikator losowania z API, nie numer z bazy wyników)
-
-Dodatkowo repo zawiera `tools/calibrate_popularity.py` — skrypt kalibracji
-empirycznej wag modelu popularności zestawów (regresja log-ilorazowa WLS
-na liczbach zwycięzców z API; train/test 80/20). Re-kalibracja jest
-automatyczna: workflow `recalibrate.yml` co miesiąc sprawdza, czy od
-ostatniej kalibracji minęło 6 miesięcy (bramka liczy od faktycznego
-ostatniego commita kalibracji, nie od kalendarza), i jeśli tak — przelicza
-wagi na świeżych danych. Wynik publikowany jest (commit + wersja patch +
-tag + release) dopiero po dowodzie determinizmu (podwójny przebieg,
-porównanie bajtowe) i przejściu strażników `tools/guard_calibration.py`
-(G1-G7: schema, spadek danych, granice wag, moc predykcyjna, limit zmiany,
-monotoniczność i świeżość dat; porażka = czerwony job + issue, bez
-publikacji). Ręczny przebieg: `python3 tools/calibrate_popularity.py
-[--game lotto|mini|all]` (domyślnie obie gry; `--dry-run` bez zapisu).
-Wynik jest wbudowywany w `index.html` jako `POPULARNOSC_KALIBR_JSON`
-(Lotto / Lotto Plus, pula 49) i `POPULARNOSC_KALIBR_MINI_JSON` (Mini Lotto,
-pula 42); pozostałe gry używają dotychczasowej heurystyki, bo albo mają
-wygrane stałe (popularność nie wpływa na wypłatę), albo dzielą pulę
-w skali międzynarodowej przy danych tylko polskich (EuroJackpot).
+Wagi modelu popularności zestawów są kalibrowane empirycznie na danych
+z API (automatyczna re-kalibracja co pół roku, publikacja tylko po dowodzie
+determinizmu i strażnikach jakości) — szczegóły: [STATUS.md](STATUS.md).
 
 ## Dane i prywatność
 
