@@ -1,0 +1,2 @@
+# Keepalive — plik aktualizowany automatycznie przez workflow keepalive.yml.
+# Zapobiega uśpieniu schedulowanych Akcji po 60 dniach bezczynności repo.

@@ -75,6 +75,12 @@ Wagi modelu popularności zestawów są kalibrowane empirycznie na danych
 z API (automatyczna re-kalibracja co pół roku, publikacja tylko po dowodzie
 determinizmu i strażnikach jakości) — szczegóły: [STATUS.md](STATUS.md).
 
+Schedulowane workflowy pilnuje też **keepalive** (GitHub Actions, raz
+w tygodniu): gdyby repo nie miało żadnego commita przez ponad 30 dni,
+robi minimalny commit techniczny — zapobiega to automatycznemu
+wyłączeniu schedulowanych Akcji przez GitHub po 60 dniach bezczynności.
+Szczegóły: [STATUS.md](STATUS.md).
+
 ## Dane i prywatność
 
 - Wszystkie obliczenia odbywają się lokalnie w przeglądarce.

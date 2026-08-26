@@ -3,7 +3,7 @@
 > Punkt startowy dla nowych sesji/czatów pracujących nad projektem.
 > Aktualizowany w tym samym commicie co każda większa zmiana.
 > **Repo jest publiczne — w tym pliku NIGDY nie ma sekretów, kluczy ani danych osobowych.**
-> Ostatnia aktualizacja: **19.08.2026** (próba generalna + v4.15.6)
+> Ostatnia aktualizacja: **27.08.2026** (keepalive CI; stan aplikacji: v4.15.6)
 
 ## Projekt
 
@@ -37,6 +37,7 @@
    - sukces: auto-bump wersji + commit + push + dispatch tag-version.yml + weryfikacja release
    - porażka strażników: reset pliku, czerwony job, deduplikowany issue — nic nie publikuje
    - pierwsza realna automatyczna rekalibracja: ~luty 2027 (6 mies. po kalibracji z v4.15.0)
+4. **Keepalive** (`.github/workflows/keepalive.yml` + `.github/KEEPALIVE`, od 27.08.2026) — pilnuje, żeby GitHub nie wyłączył schedulowanych workflow po 60 dniach bezczynności repo. Cron: niedziela 03:23 UTC + `workflow_dispatch`. Gdy ostatni commit jest starszy niż 30 dni → minimalny commit (timestamp w `.github/KEEPALIVE`, bot, `pull --rebase` przed pushem); inaczej cisza, zero commitów. Ping dotyka wyłącznie `.github/KEEPALIVE` — nie odpala `tag-version.yml` (filtr `paths: [index.html]`) i nie przesuwa bramki „due" rekalibracji (czyta historię tylko dla `index.html`). Wzorzec z repo arkadia-web_standalone-arkmap_studio; zero sekretów (`permissions: contents: write`). Próg 30 dni przy ticku tygodniowym = ~4 szanse przed limitem 60 dni.
 
 ## Hardening CI (13.08.2026)
 
@@ -49,6 +50,7 @@ Po dwóch fałszywych alarmach „Run failed" (kolejka runnerów GitHub + wyści
 - **timeout-minutes** na każdym jobie (10–20 min)
 - **akcje v7** (`checkout`, `setup-python`) — Node 24, koniec warningów deprecacji
 - **idempotentny release** (15.08.2026): krok release w `tag-version.yml` nie zależy już od flagi `created` — sprawdza `gh release view`, tworzy tylko brakujący release (z retry ×3 i re-checkiem), notatka z commita taga. Zamyka lukę: tag wypchnięty + porażka release → wcześniej release nigdy by nie powstał
+- **keepalive (27.08.2026)** trzyma ten sam zestaw: concurrency `keepalive` (`cancel-in-progress: false`), `timeout-minutes: 10`, akcje `@v7`, `pull --rebase` przed pushem, minimalne `permissions`, `set -euo pipefail`
 
 Zmiany w `tools/update_draws.py` (13.08.2026):
 

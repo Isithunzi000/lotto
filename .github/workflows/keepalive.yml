@@ -1,0 +1,53 @@
+# Keepalive — pilnuje, żeby GitHub nie wyłączył schedulowanych workflow
+# po 60 dniach bezczynności repo. Gdy ostatni commit jest starszy niż 30 dni,
+# robi minimalny commit (timestamp w .github/KEEPALIVE). Inaczej: cisza.
+# Wzorzec przeniesiony z arkadia-web_standalone-arkmap_studio; odchyłki pod
+# konwencje tego repo: akcje @v7, tożsamość github-actions[bot],
+# pull --rebase przed pushem (jak w sondzie).
+name: Keepalive
+
+on:
+  schedule:
+    - cron: '23 3 * * 0'   # niedziela 03:23 UTC — minuta poza :00/:30
+  workflow_dispatch:
+
+# Jeden run naraz — bez równoległych pushy na main.
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # commit + push pingu; nic więcej nie jest potrzebne
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10   # zawieszony checkout nie pali domyślnych 6 h
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Commit tylko gdy repo śpi > 30 dni
+        run: |
+          set -euo pipefail
+          LAST=$(git log -1 --format=%ct)
+          NOW=$(date -u +%s)
+          IDLE=$(( (NOW - LAST) / 86400 ))
+          echo "Ostatni commit: $(date -u -d "@$LAST" '+%Y-%m-%d') — minęło ${IDLE} dni"
+          if [ "$IDLE" -le 30 ]; then echo "Repo żyje — cisza."; exit 0; fi
+          {
+            echo "# Keepalive — ostatni ping: $(date -u '+%Y-%m-%d %H:%M') UTC"
+            echo "# Plik aktualizowany automatycznie przez workflow keepalive.yml;"
+            echo "# zapobiega uśpieniu schedulowanych Akcji po 60 dniach bezczynności."
+          } > .github/KEEPALIVE
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/KEEPALIVE
+          git commit -m "Keepalive: ping po ${IDLE} dniach bezczynności"
+          # pull --rebase przed pushem (jak w sondzie) — na wypadek złożenia
+          # się z commitem sondy; porażka = czerwony run, ping ponowi się
+          # za tydzień (próg 30 dni daje ~4 kolejne szanse przed limitem 60).
+          if ! git pull --rebase origin main; then
+            git rebase --abort || true
+            exit 1
+          fi
+          git push origin HEAD:main
