@@ -293,6 +293,10 @@ def item_to_record(game, item):
     res = (item.get('results') or [{}])[0]
     nums = res.get('resultsJson') or []
     extra = res.get('specialResults') or []
+    if not nums:
+        log(f'  ODRZUCONO {game} losowanie {item.get("drawSystemId")}: '
+            f'brak wyników w resultsJson (jeszcze nieopublikowane?)')
+        return None
     dt = datetime.fromisoformat(item['drawDate'].replace('Z', '+00:00')).astimezone(WARSAW)
     rec = ['', dt.strftime('%d.%m.%Y'), ','.join(f'{n:02d}' for n in sorted(nums))]
     if CSV_SPEC[game]['extra'] > 0 and extra:
@@ -870,3 +874,4 @@ def write_github_output(changed, summary):
 
 if __name__ == '__main__':
     main()
+
