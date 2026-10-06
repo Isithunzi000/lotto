@@ -188,7 +188,7 @@ def api_get(path, params, api_key, fatal=True):
             'User-Agent': 'lotto-kalkulator-sonda/1.0',
         })
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=15) as resp:
                 return json.loads(resp.read().decode('utf-8'))
         except urllib.error.HTTPError as e:
             body = e.read().decode('utf-8', 'replace')[:300]

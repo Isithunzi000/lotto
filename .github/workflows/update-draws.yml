@@ -51,7 +51,8 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 15   # zdrowy run trwa <1 min; 15 min = dead-man switch
+    timeout-minutes: 30   # zdrowy run trwa <1 min; 30 min = dead-man switch
+                          # (mieści dwie pełne próby skryptu + ponówkę wrappera)
     steps:
       - uses: actions/checkout@v7
 
